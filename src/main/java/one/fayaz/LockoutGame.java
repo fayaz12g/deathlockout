@@ -58,18 +58,18 @@ public class LockoutGame {
         String uniqueKey = rawText.replace(p1Name, "").replace(p2Name, "").trim();
 
         if (claimedDeaths.contains(uniqueKey)) {
-            player.sendSystemMessage(Component.literal("❌ That death is already claimed!").withStyle(style -> style.withColor(0xFF5555)));
+            player.sendSystemMessage(Component.literal("❌ Someone's already claimed that one!").withStyle(style -> style.withColor(0xFF5555)));
             return;
         }
 
         claimedDeaths.add(uniqueKey);
 
         if (isP1) {
-            p1History.add(uniqueKey); // Store the "clean" message for the icon logic
-            broadcast(player, Component.literal("🟦 Player 1: " + uniqueKey));
+            p1History.add(uniqueKey);
+            broadcast(player, Component.literal("🟦 "+ p1Name + "got a point!"));
         } else {
             p2History.add(uniqueKey);
-            broadcast(player, Component.literal("🟧 Player 2: " + uniqueKey));
+            broadcast(player, Component.literal("🟧 "+ p1Name + "got a point!"));
         }
 
         LockoutNetworking.broadcastState(player.level().getServer(), goal, p1History, p2History, player1, player2);
