@@ -17,19 +17,23 @@ import java.util.List;
 import java.util.UUID;
 
 public class LockoutNetworking {
-
     public static final CustomPacketPayload.Type<LockoutSyncPayload> SYNC_TYPE =
             new CustomPacketPayload.Type<>(Identifier.fromNamespaceAndPath("deathlockout", "sync"));
 
-    // Changed s1/s2 to Lists
-    public record LockoutSyncPayload(int goal, List<String> p1Deaths, List<String> p2Deaths, UUID p1, UUID p2) implements CustomPacketPayload {
+    public record PlayerData(UUID uuid, String name, int color, List<String> deaths) {
+        public static final StreamCodec<RegistryFriendlyByteBuf, PlayerData> CODEC = StreamCodec.composite(
+                UUIDUtil.STREAM_CODEC, PlayerData::uuid,
+                ByteBufCodecs.STRING_UTF8, PlayerData::name,
+                ByteBufCodecs.INT, PlayerData::color,
+                ByteBufCodecs.collection(ArrayList::new, ByteBufCodecs.STRING_UTF8), PlayerData::deaths,
+                PlayerData::new
+        );
+    }
 
+    public record LockoutSyncPayload(int goal, List<PlayerData> players) implements CustomPacketPayload {
         public static final StreamCodec<RegistryFriendlyByteBuf, LockoutSyncPayload> CODEC = StreamCodec.composite(
                 ByteBufCodecs.INT, LockoutSyncPayload::goal,
-                ByteBufCodecs.collection(ArrayList::new, ByteBufCodecs.STRING_UTF8), LockoutSyncPayload::p1Deaths,
-                ByteBufCodecs.collection(ArrayList::new, ByteBufCodecs.STRING_UTF8), LockoutSyncPayload::p2Deaths,
-                UUIDUtil.STREAM_CODEC, LockoutSyncPayload::p1,
-                UUIDUtil.STREAM_CODEC, LockoutSyncPayload::p2,
+                ByteBufCodecs.collection(ArrayList::new, PlayerData.CODEC), LockoutSyncPayload::players,
                 LockoutSyncPayload::new
         );
 
@@ -43,13 +47,21 @@ public class LockoutNetworking {
         PayloadTypeRegistry.playS2C().register(SYNC_TYPE, LockoutSyncPayload.CODEC);
     }
 
-    // Update broadcast to take lists
-    public static void broadcastState(MinecraftServer server, int goal, List<String> d1, List<String> d2, UUID p1, UUID p2) {
+    public static void broadcastState(MinecraftServer server, int goal, List<PlayerEntry> playerEntries) {
         if (server == null) return;
-        UUID safeP1 = p1 == null ? UUID.randomUUID() : p1;
-        UUID safeP2 = p2 == null ? UUID.randomUUID() : p2;
 
-        LockoutSyncPayload payload = new LockoutSyncPayload(goal, d1, d2, safeP1, safeP2);
+        List<PlayerData> playerDataList = new ArrayList<>();
+        for (PlayerEntry entry : playerEntries) {
+            playerDataList.add(new PlayerData(
+                    entry.getUuid(),
+                    entry.getName(),
+                    entry.getColor(),
+                    new ArrayList<>(entry.getDeaths())
+            ));
+        }
+
+        LockoutSyncPayload payload = new LockoutSyncPayload(goal, playerDataList);
+
         for (ServerPlayer player : PlayerLookup.all(server)) {
             ServerPlayNetworking.send(player, payload);
         }

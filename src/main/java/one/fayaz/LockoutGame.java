@@ -4,42 +4,68 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
+
 import java.util.*;
 
 public class LockoutGame {
     public static final LockoutGame INSTANCE = new LockoutGame();
 
     private boolean active = false;
-    private int goal = 10;
-
-    private UUID player1;
-    private UUID player2;
-    private String p1Name = "";
-    private String p2Name = "";
-
-    // Changed to Lists to track history
-    private final List<String> p1History = new ArrayList<>();
-    private final List<String> p2History = new ArrayList<>();
-
+    private int goal = 0;
+    private final Map<UUID, PlayerEntry> players = new LinkedHashMap<>();
     private final Set<String> claimedDeaths = new HashSet<>();
 
-    public void start(int goal, ServerPlayer p1, ServerPlayer p2) {
-        this.active = true;
+    public void setGoal(int goal) {
         this.goal = goal;
-        this.player1 = p1.getUUID();
-        this.player2 = p2.getUUID();
-        this.p1Name = p1.getName().getString();
-        this.p2Name = p2.getName().getString();
-        this.p1History.clear();
-        this.p2History.clear();
+    }
+
+    public int getGoal() {
+        return goal;
+    }
+
+    public int addPlayer(ServerPlayer player, int color) {
+        if (active) {
+            player.sendSystemMessage(Component.literal("❌ Cannot add players while game is active!").withStyle(style -> style.withColor(0xFF5555)));
+            return 1;
+        }
+
+        UUID uuid = player.getUUID();
+        if (players.containsKey(uuid)) {
+            player.sendSystemMessage(Component.literal("❌ Player already added!").withStyle(style -> style.withColor(0xFF5555)));
+            return 1;
+        }
+
+        players.put(uuid, new PlayerEntry(uuid, player.getName().getString(), color));
+        player.sendSystemMessage(Component.literal("✓ Added to lockout with color!").withStyle(style -> style.withColor(0x55FF55)));
+        return 0;
+    }
+
+    public boolean canStart() {
+        return players.size() >= 2 && goal > 0;
+    }
+
+    public void start(MinecraftServer server) {
+        if (!canStart()) {
+            return;
+        }
+
+        this.active = true;
         this.claimedDeaths.clear();
 
-        LockoutNetworking.broadcastState(p1.level().getServer(), goal, p1History, p2History, player1, player2);
+        // Clear all player death histories
+        for (PlayerEntry entry : players.values()) {
+            entry.getDeaths().clear();
+        }
+
+        broadcastToServer(server, Component.literal("🎮 Lockout Started! Goal: " + goal).withStyle(style -> style.withColor(0x55FF55).withBold(true)));
+        LockoutNetworking.broadcastState(server, goal, new ArrayList<>(players.values()));
     }
 
     public void stop(MinecraftServer server) {
         this.active = false;
-        LockoutNetworking.broadcastState(server, 0, new ArrayList<>(), new ArrayList<>(), player1, player2);
+        this.players.clear();
+        this.goal = 0;
+        LockoutNetworking.broadcastState(server, 0, new ArrayList<>());
     }
 
     public boolean isActive() {
@@ -49,13 +75,20 @@ public class LockoutGame {
     public void handleDeath(ServerPlayer player, DamageSource source) {
         if (!active) return;
 
-        boolean isP1 = player.getUUID().equals(player1);
-        boolean isP2 = player.getUUID().equals(player2);
-        if (!isP1 && !isP2) return;
+        UUID uuid = player.getUUID();
+        PlayerEntry entry = players.get(uuid);
+
+        if (entry == null) return;
 
         Component deathMessage = source.getLocalizedDeathMessage(player);
         String rawText = deathMessage.getString();
-        String uniqueKey = rawText.replace(p1Name, "").replace(p2Name, "").trim();
+
+        // Remove all player names from the death message to get unique key
+        String uniqueKey = rawText;
+        for (PlayerEntry p : players.values()) {
+            uniqueKey = uniqueKey.replace(p.getName(), "");
+        }
+        uniqueKey = uniqueKey.trim();
 
         if (claimedDeaths.contains(uniqueKey)) {
             player.sendSystemMessage(Component.literal("❌ Someone's already claimed that one!").withStyle(style -> style.withColor(0xFF5555)));
@@ -63,30 +96,33 @@ public class LockoutGame {
         }
 
         claimedDeaths.add(uniqueKey);
+        entry.addDeath(uniqueKey);
 
-        if (isP1) {
-            p1History.add(uniqueKey);
-            broadcast(player, Component.literal("🟦 "+ p1Name + "got a point!"));
-        } else {
-            p2History.add(uniqueKey);
-            broadcast(player, Component.literal("🟧 "+ p1Name + "got a point!"));
+        // Broadcast point gain
+        broadcastToServer(player.level().getServer(),
+                Component.literal("⬛ " + entry.getName() + " got a point!").withStyle(style -> style.withColor(entry.getColor())));
+
+        LockoutNetworking.broadcastState(player.level().getServer(), goal, new ArrayList<>(players.values()));
+
+        // Check for winner
+        if (entry.getScore() >= goal) {
+            win(player, entry);
         }
-
-        LockoutNetworking.broadcastState(player.level().getServer(), goal, p1History, p2History, player1, player2);
-
-        if (p1History.size() >= goal) win(player, p1Name);
-        else if (p2History.size() >= goal) win(player, p2Name);
     }
 
-    private void win(ServerPlayer player, String winner) {
-        broadcast(player, Component.literal("🏆 " + winner + " WINS! 🏆").withStyle(style -> style.withBold(true).withColor(0x55FF55)));
+    private void win(ServerPlayer player, PlayerEntry winner) {
+        broadcastToServer(player.level().getServer(),
+                Component.literal("🏆 " + winner.getName() + " WINS! 🏆").withStyle(style -> style.withBold(true).withColor(0x55FF55)));
         stop(player.level().getServer());
     }
 
-    private void broadcast(ServerPlayer player, Component msg) {
-        MinecraftServer server = player.level().getServer();
+    private void broadcastToServer(MinecraftServer server, Component msg) {
         if (server != null) {
             server.getPlayerList().broadcastSystemMessage(msg, false);
         }
+    }
+
+    public Map<UUID, PlayerEntry> getPlayers() {
+        return players;
     }
 }

@@ -1,32 +1,36 @@
 package one.fayaz;
 
-import com.mojang.authlib.GameProfile;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.multiplayer.PlayerInfo;
-import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.SpawnEggItem;
-import net.minecraft.world.item.component.ResolvableProfile;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 
 public class DeathLockoutClient implements ClientModInitializer {
 
     // Client-side state
     private static int clientGoal = 0;
-    private static List<String> p1Deaths = new ArrayList<>();
-    private static List<String> p2Deaths = new ArrayList<>();
-    private static UUID clientP1 = null;
-    private static UUID clientP2 = null;
+    private static List<PlayerData> clientPlayers = new ArrayList<>();
+
+    public static class PlayerData {
+        public String name;
+        public int color;
+        public List<String> deaths;
+
+        public PlayerData(String name, int color, List<String> deaths) {
+            this.name = name;
+            this.color = color;
+            this.deaths = new ArrayList<>(deaths);
+        }
+    }
 
     @Override
     public void onInitializeClient() {
@@ -34,16 +38,19 @@ public class DeathLockoutClient implements ClientModInitializer {
         ClientPlayNetworking.registerGlobalReceiver(LockoutNetworking.SYNC_TYPE, (payload, context) -> {
             context.client().execute(() -> {
                 clientGoal = payload.goal();
-                p1Deaths = payload.p1Deaths();
-                p2Deaths = payload.p2Deaths();
-                clientP1 = payload.p1();
-                clientP2 = payload.p2();
+                clientPlayers.clear();
+
+                for (LockoutNetworking.PlayerData pd : payload.players()) {
+                    clientPlayers.add(new PlayerData(pd.name(), pd.color(), pd.deaths()));
+                }
             });
         });
 
         // 2. Render HUD
         HudRenderCallback.EVENT.register((drawContext, tickDelta) -> {
-            if (clientGoal > 0) renderLockoutHud(drawContext);
+            if (clientGoal > 0 && !clientPlayers.isEmpty()) {
+                renderLockoutHud(drawContext);
+            }
         });
     }
 
@@ -55,65 +62,60 @@ public class DeathLockoutClient implements ClientModInitializer {
         int centerX = width / 2;
         int topY = 15;
 
-        // --- Draw Goal Text ---
-        String goalText = String.valueOf(clientGoal);
-        int textWidth = client.font.width(goalText);
-        graphics.drawString(client.font, goalText, centerX - (textWidth / 2), topY + 5, 0xFFFFFF, true);
-
         // --- Config ---
-        int slotSize = 18; // Standard MC Slot size
-        int gap = 20;
-        int centerMargin = 25;
+        int slotSize = 18;
+        int playerGap = 25; // Gap between players
+        int boxGap = 2; // Gap between boxes within a player
         int boxesToDraw = clientGoal - 1;
 
-        // --- PLAYER 1 (Left) ---
-        for (int i = 0; i < boxesToDraw; i++) {
-            int offsetSteps = (boxesToDraw - 1) - i;
-            int x = centerX - centerMargin - slotSize - (offsetSteps * gap);
-            int y = topY;
+        // Calculate total width needed per player
+        int playerWidth = (boxesToDraw * slotSize) + ((boxesToDraw - 1) * boxGap);
+        int totalWidth = (clientPlayers.size() * playerWidth) + ((clientPlayers.size() - 1) * playerGap);
 
-            if (i < p1Deaths.size()) {
-                // CLAIMED: Draw Red Background + Icon
-                // 0x80FF0000 = Semi-transparent Red
-                graphics.fill(x, y, x + slotSize, y + slotSize, 0x80FF0000);
-                graphics.renderOutline(x, y, slotSize, slotSize, 0xFFFF0000); // Solid Red Border
+        // Starting X position to center everything
+        int startX = centerX - (totalWidth / 2);
 
-                // Draw Icon
-                String deathCause = p1Deaths.get(i);
-                ItemStack icon = getIconForDeath(deathCause, clientP1);
-                graphics.renderItem(icon, x + 1, y + 1); // +1 to center 16px item in 18px slot
-            } else {
-                // EMPTY: Draw Gray Background
-                // 0x55000000 = Semi-transparent Black/Gray
-                graphics.fill(x, y, x + slotSize, y + slotSize, 0x55000000);
+        // Draw goal text at the top
+        String goalText = "Goal: " + clientGoal;
+        int textWidth = client.font.width(goalText);
+        graphics.drawString(client.font, goalText, centerX - (textWidth / 2), topY - 12, 0xFFFFFF, true);
+
+        // Draw each player's progress
+        int currentX = startX;
+        for (PlayerData player : clientPlayers) {
+            // Draw player name above their boxes
+            String nameText = player.name;
+            int nameWidth = client.font.width(nameText);
+            int nameCenterX = currentX + (playerWidth / 2) - (nameWidth / 2);
+            graphics.drawString(client.font, nameText, nameCenterX, topY + slotSize + 3, player.color, true);
+
+            // Draw boxes for this player
+            for (int i = 0; i < boxesToDraw; i++) {
+                int x = currentX + (i * (slotSize + boxGap));
+                int y = topY;
+
+                if (i < player.deaths.size()) {
+                    // CLAIMED: Draw colored background + icon
+                    int bgColor = (player.color & 0xFFFFFF) | 0x80000000; // Semi-transparent version
+                    graphics.fill(x, y, x + slotSize, y + slotSize, bgColor);
+                    graphics.renderOutline(x, y, slotSize, slotSize, player.color | 0xFF000000); // Solid border
+
+                    // Draw Icon
+                    String deathCause = player.deaths.get(i);
+                    ItemStack icon = getIconForDeath(deathCause);
+                    graphics.renderItem(icon, x + 1, y + 1);
+                } else {
+                    // EMPTY: Draw gray background
+                    graphics.fill(x, y, x + slotSize, y + slotSize, 0x55000000);
+                }
             }
-        }
 
-        // --- PLAYER 2 (Right) ---
-        for (int i = 0; i < boxesToDraw; i++) {
-            int offsetSteps = (boxesToDraw - 1) - i;
-            int x = centerX + centerMargin + (offsetSteps * gap);
-            int y = topY;
-
-            if (i < p2Deaths.size()) {
-                // CLAIMED: Draw Orange Background + Icon
-                // 0x80FFAA00 = Semi-transparent Orange
-                graphics.fill(x, y, x + slotSize, y + slotSize, 0x80FFAA00);
-                graphics.renderOutline(x, y, slotSize, slotSize, 0xFFFFAA00); // Solid Orange Border
-
-                // Draw Icon
-                String deathCause = p2Deaths.get(i);
-                ItemStack icon = getIconForDeath(deathCause, clientP2);
-                graphics.renderItem(icon, x + 1, y + 1);
-            } else {
-                // EMPTY: Draw Gray Background
-                graphics.fill(x, y, x + slotSize, y + slotSize, 0x55000000);
-            }
+            currentX += playerWidth + playerGap;
         }
     }
 
     // --- LOGIC: Convert Death String to Item ---
-    private ItemStack getIconForDeath(String cause, UUID playerUuid) {
+    private ItemStack getIconForDeath(String cause) {
         String lower = cause.toLowerCase();
 
         // 1. Environmental
@@ -144,36 +146,6 @@ public class DeathLockoutClient implements ClientModInitializer {
         }
 
         // 3. Fallback
-//        return getPlayerHead(playerUuid);
         return new ItemStack(Items.PLAYER_HEAD);
     }
-
-//    private ItemStack getPlayerHead(UUID uuid) {
-//        ItemStack stack = new ItemStack(Items.PLAYER_HEAD);
-//        if (uuid == null) return stack;
-//
-//        // 1. Try to get cached profile (contains Skin texture)
-//        GameProfile profile = null;
-//        Minecraft client = Minecraft.getInstance();
-//        if (client.getConnection() != null) {
-//            PlayerInfo info = client.getConnection().getPlayerInfo(uuid);
-//            if (info != null) {
-//                profile = info.getProfile();
-//            }
-//        }
-//
-//        // 2. If not found in cache, create a raw profile with just the UUID
-//        // Note: We use "unknown" for the name if null, to satisfy the GameProfile constructor
-//        if (profile == null) {
-//            profile = new GameProfile(uuid, "unknown");
-//        }
-//
-//        // 3. Set the Data Component
-//        // In 1.21+, ResolvableProfile is a Record.
-//        // Ensure there are NO curly braces { } after this line.
-//        stack.set(DataComponents.PROFILE, new ResolvableProfile(profile));
-//
-//        return stack;
-//    }
-
 }
