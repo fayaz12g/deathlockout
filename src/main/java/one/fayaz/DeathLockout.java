@@ -57,8 +57,13 @@ public class DeathLockout implements ModInitializer {
                     // /lockout start
                     .then(Commands.literal("start")
                             .executes(ctx -> {
-                                if (!LockoutGame.INSTANCE.canStart()) {
-                                    ctx.getSource().sendFailure(Component.literal("❌ Need at least 2 players and a goal > 0!"));
+                                int canStart = LockoutGame.INSTANCE.canStart();
+                                if (canStart == -1) {
+                                    ctx.getSource().sendFailure(Component.literal("❌ Goal needs to be set above 0! Set it with /lockout goal <number>"));
+                                    return 0;
+                                }
+                                else if (canStart < 2) {
+                                    ctx.getSource().sendFailure(Component.literal("❌ Need at least " + (2 - canStart) + " more player(s) to start. Add them with /lockout add <player> <color>"));
                                     return 0;
                                 }
                                 LockoutGame.INSTANCE.start(ctx.getSource().getServer());
@@ -97,7 +102,7 @@ public class DeathLockout implements ModInitializer {
                                                     return 0;
                                                 }
 
-                                                if (LockoutGame.INSTANCE.addPlayer(player, color) == 0) {
+                                                if (LockoutGame.INSTANCE.addPlayer(player, color)) {
                                                     ctx.getSource().sendSystemMessage(Component.literal("✓ Added " + player.getName().getString()).withStyle(style -> style.withColor(color)));
                                                 }
                                                 return 1;

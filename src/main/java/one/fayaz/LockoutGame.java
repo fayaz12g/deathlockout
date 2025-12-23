@@ -23,29 +23,34 @@ public class LockoutGame {
         return goal;
     }
 
-    public int addPlayer(ServerPlayer player, int color) {
+    public boolean addPlayer(ServerPlayer player, int color) {
         if (active) {
             player.sendSystemMessage(Component.literal("❌ Cannot add players while game is active!").withStyle(style -> style.withColor(0xFF5555)));
-            return 1;
+            return false;
         }
 
         UUID uuid = player.getUUID();
         if (players.containsKey(uuid)) {
             player.sendSystemMessage(Component.literal("❌ Player already added!").withStyle(style -> style.withColor(0xFF5555)));
-            return 1;
+            return false;
         }
 
         players.put(uuid, new PlayerEntry(uuid, player.getName().getString(), color));
         player.sendSystemMessage(Component.literal("✓ Added to lockout with color!").withStyle(style -> style.withColor(0x55FF55)));
-        return 0;
+        return true;
     }
 
-    public boolean canStart() {
-        return players.size() >= 2 && goal > 0;
+    public int canStart() {
+        if (goal < 1) {
+            return -1;
+        }
+        else {
+            return players.size();
+        }
     }
 
     public void start(MinecraftServer server) {
-        if (!canStart()) {
+        if (canStart() >= 2) {
             return;
         }
 
