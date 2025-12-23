@@ -36,6 +36,12 @@
       border-bottom: 1px solid var(--border);
     }
 
+    .header-icon {
+      width: 256px;  
+      height: auto;
+      margin-bottom: 1rem;
+    }
+
     header h1 {
       margin: 0;
       font-size: 2.8rem;
@@ -178,35 +184,40 @@
 <body>
 
   <header>
-    <h1>💀 Death Lockout</h1>
+    <img
+      src="src/main/resources/assets/deathlockout/icon.png"
+      alt="Death Lockout Icon"
+      class="header-icon"
+    />
+
+    <h1>Death Lockout</h1>
     <p>
       A competitive lockout-style Minecraft game mode where the goal is simple:
       <span class="accent">die in as many unique ways as possible</span> before your opponents.
     </p>
 
-      <p>Available on your favorite mod platforms</p>
+      <div class="download-buttons">
+        <a
+          href="https://modrinth.com/mod/death-lockout"
+          target="_blank"
+          class="btn modrinth"
+        >
+          Download on Modrinth
+        </a>
 
-    <div class="download-buttons">
-      <a
-        href="https://modrinth.com/mod/death-lockout"
-        target="_blank"
-        class="btn modrinth"
-      >
-        Download on Modrinth
-      </a>
-
-      <a
-        href="https://www.curseforge.com/minecraft/mc-mods/death-lockout"
-        target="_blank"
-        class="btn curseforge"
-      >
-        Download on CurseForge
-      </a>
+        <a
+          href="https://www.curseforge.com/minecraft/mc-mods/death-lockout"
+          target="_blank"
+          class="btn curseforge"
+        >
+          Download on CurseForge
+        </a>
     </div>
 
   </header>
 
   <main>
+
 
     <section>
       <h2>🎯 How It Works</h2>
