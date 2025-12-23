@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Death Lockout</title>
+
+  <style>
+    :root {
+      --bg: #0f1115;
+      --card: #161922;
+      --text: #e6e6eb;
+      --muted: #a0a3b1;
+      --accent: #ff4d4d;
+      --code-bg: #0b0d12;
+      --border: #262a38;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+                   Roboto, Oxygen, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    header {
+      padding: 3rem 1.5rem 2rem;
+      text-align: center;
+      background: linear-gradient(180deg, #161922, #0f1115);
+      border-bottom: 1px solid var(--border);
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 2.8rem;
+      letter-spacing: 0.5px;
+    }
+
+    header p {
+      margin-top: 0.75rem;
+      color: var(--muted);
+      max-width: 700px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    main {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 4rem;
+    }
+
+    section {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.75rem;
+      margin-bottom: 1.75rem;
+    }
+
+    h2 {
+      margin-top: 0;
+      font-size: 1.6rem;
+    }
+
+    h3 {
+      margin-bottom: 0.5rem;
+      font-size: 1.2rem;
+    }
+
+    p {
+      margin: 0.5rem 0 1rem;
+    }
+
+    ul {
+      padding-left: 1.25rem;
+    }
+
+    li {
+      margin: 0.35rem 0;
+    }
+
+    code {
+      background: var(--code-bg);
+      padding: 0.15em 0.35em;
+      border-radius: 6px;
+      font-size: 0.95em;
+    }
+
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem;
+      overflow-x: auto;
+      margin: 1rem 0;
+    }
+
+    pre code {
+      background: none;
+      padding: 0;
+      font-size: 0.95rem;
+      color: #dcdcff;
+    }
+
+    .accent {
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    footer {
+      text-align: center;
+      color: var(--muted);
+      padding: 2rem 1rem 3rem;
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 600px) {
+      header h1 {
+        font-size: 2.2rem;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>💀 Death Lockout</h1>
+    <p>
+      A competitive lockout-style Minecraft game mode where the goal is simple:
+      <span class="accent">die in as many unique ways as possible</span> before your opponents.
+    </p>
+  </header>
+
+  <main>
+
+    <section>
+      <h2>🎯 How It Works</h2>
+      <ul>
+        <li>Each player earns <strong>1 point per unique death</strong></li>
+        <li>A death can only be scored <strong>once per game</strong>, globally</li>
+        <li>The first player to reach the target number of unique deaths <strong>wins</strong></li>
+        <li>Supports <strong>2+ players</strong> simultaneously</li>
+        <li>Each player has a <strong>custom HUD color</strong></li>
+        <li>Creativity, speed, and risk-taking are rewarded</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>☠️ What Counts as a “Unique” Death?</h2>
+      <p>
+        Deaths are categorized by their <strong>death message</strong>,
+        with player names ignored.
+      </p>
+
+      <p>These count as the <strong>same</strong> death:</p>
+      <ul>
+        <li><code>Fayaz was slain by Iron Golem</code></li>
+        <li><code>Kristaugh was slain by Iron Golem</code></li>
+      </ul>
+
+      <p>These count as <strong>different</strong> deaths:</p>
+      <ul>
+        <li><code>was slain by Iron Golem</code></li>
+        <li><code>was blown up by Creeper</code></li>
+        <li><code>fell from a high place</code></li>
+        <li><code>burned to death</code></li>
+      </ul>
+
+      <p>
+        In short:
+        <br />
+        • Player names are removed  
+        <br />
+        • Identical remaining text = same death type
+      </p>
+    </section>
+
+    <section>
+      <h2>▶️ Commands</h2>
+
+      <h3>1. Set the goal</h3>
+      <pre><code>/lockout goal &lt;number&gt;</code></pre>
+      <p>Example:</p>
+      <pre><code>/lockout goal 5</code></pre>
+
+      <h3>2. Add players with colors</h3>
+      <pre><code>/lockout add &lt;player&gt; &lt;color&gt;</code></pre>
+
+      <p><strong>Color options:</strong></p>
+      <ul>
+        <li>Named colors: red, orange, yellow, lime, green, cyan, blue, purple, magenta, pink, white, gray, black</li>
+        <li>Hex formats: <code>#FF5555</code>, <code>0xAABBCC</code>, <code>FF5555</code></li>
+      </ul>
+
+      <pre><code>/lockout add @p red
+/lockout add Steve blue
+/lockout add Alex #00FF00
+/lockout add Notch 0xFFAA00</code></pre>
+
+      <h3>3. Start the game</h3>
+      <pre><code>/lockout start</code></pre>
+      <p>
+        Requires at least <strong>2 players</strong> and a goal greater than 0.
+      </p>
+
+      <h3>Other commands</h3>
+      <pre><code>/lockout reset
+/lockout status</code></pre>
+    </section>
+
+    <section>
+      <h2>📊 HUD Display</h2>
+      <ul>
+        <li>Goal number at the top center</li>
+        <li>Progress boxes in each player’s custom color</li>
+        <li>Player names below their progress</li>
+        <li>Icons showing which deaths have been claimed</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>📦 Installation</h2>
+      <p>
+        ⚠️ <strong>Required on both client and server</strong>
+      </p>
+      <p>
+        All players must have the mod installed for Death Lockout to function correctly.
+      </p>
+    </section>
+
+    <section>
+      <h2>🧠 Tips</h2>
+      <ul>
+        <li>Environmental deaths matter</li>
+        <li>Claim common deaths early</li>
+        <li>Force opponents into risky situations 😈</li>
+        <li>Unusual deaths can secure victory</li>
+        <li>Watch the HUD to track what’s already taken</li>
+      </ul>
+    </section>
+
+  </main>
+
+  <footer>
+    Good luck — and happy dying 💀
+  </footer>
+
+</body>
+</html>
