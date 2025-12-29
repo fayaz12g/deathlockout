@@ -1,6 +1,7 @@
 ![logo](src/main/resources/assets/lockout/icon.png)
 
 ## 🎮 Fayaz's Lockout
+### Multiplayer - 2-100 Players
 
 **Fayaz's Lockout** is a competitive lockout-style game mode with multiple play modes where players race to claim unique objectives before their opponents.
 
@@ -28,11 +29,33 @@ Examples of unique deaths:
 **Kill as many *unique* mob types as possible before your opponents do.**
 
 Each different mob type counts as one objective:
-- Zombie
-- Creeper
-- Skeleton
-- Iron Golem
-- etc.
+- Zombie, Creeper, Skeleton, Iron Golem, Warden, etc.
+
+### 🛡️ Armor Mode
+**Wear complete armor sets or individual pieces before your opponents do.**
+
+Two submodes:
+- **SET**: Claim a material by wearing a complete matching armor set (helmet, chestplate, leggings, boots)
+- **PIECE**: Claim a material by wearing any single piece of that armor type
+
+Available materials:
+- Leather, Chainmail, Iron, Gold, Diamond, Netherite (6 total)
+
+### 🏆 Advancements Mode
+**Unlock unique advancements before your opponents do.**
+
+Race to complete advancements like:
+- Stone Age, Acquire Hardware, Diamonds!, We Need to Go Deeper, etc.
+- 90+ advancements available in vanilla Minecraft
+- Recipe advancements are excluded
+
+### 🍖 Foods Mode
+**Eat unique food types before your opponents do.**
+
+Claim foods by consuming them:
+- Apples, Bread, Cooked Beef, Golden Carrots, etc.
+- 40+ food items in vanilla Minecraft
+- Includes drinks like Milk and Honey
 
 ---
 
@@ -41,7 +64,7 @@ Each different mob type counts as one objective:
 - Each player earns **1 point per unique objective**
 - An objective can only be scored **once per game**, globally
 - The first player to reach the target goal **wins**
-- Supports **2+ players** competing simultaneously
+- Supports **2-100 players** competing simultaneously
 - Each player has a **unique custom color** to track their progress on the HUD
 - Creativity, risk-taking, and quick thinking are rewarded
 
@@ -55,19 +78,27 @@ Each different mob type counts as one objective:
 ```
 /lockout goal <number>
 ```
-Example: `/lockout goal 5`
+Example: `/lockout goal 5`  
+Default is 5. No upper limit.
 
 **2. Choose the game mode:**
 ```
 /lockout mode kills
+/lockout mode armor <set|piece>
+/lockout mode advancements
+/lockout mode foods
 /lockout mode death <source|message>
 ```
 
 Examples:
 ```
 /lockout mode kills
-/lockout mode death source    (recommended - matches by damage type)
-/lockout mode death message   (matches by death message text)
+/lockout mode armor set          (full matching sets required)
+/lockout mode armor piece        (any single piece claims that material)
+/lockout mode advancements
+/lockout mode foods
+/lockout mode death source       (recommended - matches by damage type)
+/lockout mode death message      (matches by death message text)
 ```
 
 **3. Add players:**
@@ -144,7 +175,7 @@ When the game starts:
 **Auto-pause on disconnect:**
 - If a participating player disconnects, the game automatically pauses
 - All remaining players are frozen
-- A title message displays: "⏸ PAUSED - Waiting for [player] to reconnect"
+- A title message displays: "|| PAUSED - Waiting for [player] to reconnect"
 - When the player reconnects, the game automatically resumes
 
 **Stop the current match:**
@@ -172,21 +203,19 @@ Shows:
 
 ---
 
-## 🎮 Example Game Setup
+## 🎮 Example Game Setups
 
-### Death Mode Example:
+### Death Mode:
 ```
 /lockout goal 5
 /lockout mode death source
 /lockout spawnpoint
 /lockout player add Player1 red
 /lockout player add Player2 blue
-/lockout player add Player3 green
-/lockout player add Player4 yellow
 /lockout start
 ```
 
-### Kills Mode Example:
+### Kills Mode:
 ```
 /lockout goal 10
 /lockout mode kills
@@ -195,7 +224,41 @@ Shows:
 /lockout start
 ```
 
-Now all players race to get their goal first!
+### Armor Mode (Set):
+```
+/lockout goal 3
+/lockout mode armor set
+/lockout player add Player1 red
+/lockout player add Player2 blue
+/lockout start
+```
+
+### Armor Mode (Piece):
+```
+/lockout goal 6
+/lockout mode armor piece
+/lockout player add Player1 red
+/lockout player add Player2 blue
+/lockout start
+```
+
+### Advancements Mode:
+```
+/lockout goal 15
+/lockout mode advancements
+/lockout player add Player1 red
+/lockout player add Player2 blue
+/lockout start
+```
+
+### Foods Mode:
+```
+/lockout goal 10
+/lockout mode foods
+/lockout player add Player1 red
+/lockout player add Player2 blue
+/lockout start
+```
 
 ---
 
@@ -208,6 +271,9 @@ During an active game, the HUD shows:
 - **Icons** for each claimed objective:
   - Death mode: Shows the item/mob that killed them
   - Kills mode: Shows spawn eggs for killed mobs
+  - Armor mode: Shows the chestplate of claimed armor types
+  - Advancements mode: Shows related items (knowledge book default)
+  - Foods mode: Shows the food item that was eaten
 
 When paused, a large title appears in the center showing which player is being waited for.
 
@@ -237,25 +303,48 @@ All players must have the mod installed for Lockout to function correctly. The m
 - Don't waste time on already-claimed mobs
 - Check the HUD to see what's been claimed
 
+### Armor Mode:
+- **SET**: Focus on one material at a time - partial sets don't count
+- **PIECE**: Rush cheap materials (leather, gold) for easy early points
+- Mine strategically based on what materials are still available
+- In SET mode, carry backup pieces in case one breaks
+- In PIECE mode, wear your claimed armor to free inventory space
+
+### Advancements Mode:
+- Prioritize quick, easy advancements early (wood, stone tools)
+- Plan advancement chains (some unlock others)
+- Check the advancement tree to see what's possible
+- Balance exploration vs progression advancements
+- Remember recipe advancements don't count
+
+### Foods Mode:
+- Set up farms early for renewable food sources
+- Fishing can provide multiple unique foods quickly
+- Golden foods and suspicious stews count
+- Raid villages for bread and other prepared foods
+- Balance hunting, farming, and gathering
+
 ### General:
 - Watch what objectives others have claimed on the HUD
 - Communicate with teammates (or don't, if you're competing!)
 - The pause system means you don't lose progress if someone disconnects
 - Use the stop command to end a match early if needed
+- Different modes reward different playstyles - choose based on your strengths
 
 ---
 
 ## 🎨 Features
 
-- ✅ Multiple game modes (Death & Kills)
-- ✅ Configurable death matching (source or message)
+- ✅ Five game modes (Death, Kills, Armor, Advancements, Foods)
+- ✅ Configurable submodes for Death and Armor
 - ✅ Custom spawn points
 - ✅ 3-second countdown with player freeze
 - ✅ Auto-pause on player disconnect
 - ✅ Manual pause/unpause
 - ✅ Unique color requirement per player
 - ✅ Live HUD with progress tracking
-- ✅ Icon display for claimed objectives
+- ✅ Mode-specific icon display for claimed objectives
 - ✅ Separate stop vs reset commands
+- ✅ Supports 2-100 players
 
 Good luck, and may the best player win! 🏆
