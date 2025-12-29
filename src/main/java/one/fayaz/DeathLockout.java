@@ -109,6 +109,34 @@ public class DeathLockout implements ModInitializer {
                                     })
                             )
                     )
+                    // /lockout death <mode>
+                    .then(Commands.literal("death")
+                            .then(Commands.argument("mode", StringArgumentType.word())
+                                    .suggests((context, builder) -> {
+                                        builder.suggest("message");
+                                        builder.suggest("source");
+                                        return builder.buildFuture();
+                                    })
+                                    .executes(ctx -> {
+                                        String modeStr = StringArgumentType.getString(ctx, "mode").toLowerCase();
+                                        LockoutGame.DeathMatchMode matchMode;
+
+                                        if (modeStr.equals("message")) {
+                                            matchMode = LockoutGame.DeathMatchMode.MESSAGE;
+                                            ctx.getSource().sendSystemMessage(Component.literal("✓ Death matching set to: MESSAGE (raw death messages)").withStyle(style -> style.withColor(0x55FF55)));
+                                        } else if (modeStr.equals("source")) {
+                                            matchMode = LockoutGame.DeathMatchMode.SOURCE;
+                                            ctx.getSource().sendSystemMessage(Component.literal("✓ Death matching set to: SOURCE (damage types)").withStyle(style -> style.withColor(0x55FF55)));
+                                        } else {
+                                            ctx.getSource().sendFailure(Component.literal("❌ Invalid mode! Use 'message' or 'source'"));
+                                            return 0;
+                                        }
+
+                                        LockoutGame.INSTANCE.setDeathMatchMode(matchMode);
+                                        return 1;
+                                    })
+                            )
+                    )
                     // /lockout add <player> <color>
                     .then(Commands.literal("add")
                             .then(Commands.argument("player", EntityArgument.player())
@@ -153,10 +181,12 @@ public class DeathLockout implements ModInitializer {
                                 int playerCount = LockoutGame.INSTANCE.getPlayers().size();
                                 boolean active = LockoutGame.INSTANCE.isActive();
                                 String mode = LockoutGame.INSTANCE.getMode().toString();
+                                String deathMatch = LockoutGame.INSTANCE.getDeathMatchMode().toString();
 
                                 ctx.getSource().sendSystemMessage(Component.literal("--- Lockout Status ---"));
                                 ctx.getSource().sendSystemMessage(Component.literal("Active: " + (active ? "Yes" : "No")));
                                 ctx.getSource().sendSystemMessage(Component.literal("Mode: " + mode));
+                                ctx.getSource().sendSystemMessage(Component.literal("Death Matching: " + deathMatch));
                                 ctx.getSource().sendSystemMessage(Component.literal("Goal: " + goal));
                                 ctx.getSource().sendSystemMessage(Component.literal("Players: " + playerCount));
 

@@ -16,9 +16,15 @@ public class LockoutGame {
         KILLS
     }
 
+    public enum DeathMatchMode {
+        MESSAGE,  // Match by death message string (original behavior)
+        SOURCE    // Match by damage source type (more reliable)
+    }
+
     private boolean active = false;
     private int goal = 0;
     private GameMode mode = GameMode.DEATH;
+    private DeathMatchMode deathMatchMode = DeathMatchMode.SOURCE;
     private final Map<UUID, PlayerEntry> players = new LinkedHashMap<>();
     private final Set<String> claimedItems = new HashSet<>(); // Used for both deaths and kills
 
@@ -32,6 +38,14 @@ public class LockoutGame {
 
     public GameMode getMode() {
         return mode;
+    }
+
+    public void setDeathMatchMode(DeathMatchMode deathMatchMode) {
+        this.deathMatchMode = deathMatchMode;
+    }
+
+    public DeathMatchMode getDeathMatchMode() {
+        return deathMatchMode;
     }
 
     public boolean addPlayer(ServerPlayer player, int color) {
@@ -85,6 +99,7 @@ public class LockoutGame {
         this.players.clear();
         this.goal = 0;
         this.mode = GameMode.DEATH;
+        this.deathMatchMode = DeathMatchMode.SOURCE;
         LockoutNetworking.broadcastState(server, 0, new ArrayList<>(), GameMode.DEATH);
     }
 
@@ -100,15 +115,28 @@ public class LockoutGame {
 
         if (entry == null) return;
 
-        Component deathMessage = source.getLocalizedDeathMessage(player);
-        String rawText = deathMessage.getString();
+        String uniqueKey;
 
-        // Remove all player names from the death message to get unique key
-        String uniqueKey = rawText;
-        for (PlayerEntry p : players.values()) {
-            uniqueKey = uniqueKey.replace(p.getName(), "");
+        // Choose matching method based on configuration
+        if (deathMatchMode == DeathMatchMode.MESSAGE) {
+            // Original method: Use death message string with player names removed
+            Component deathMessage = source.getLocalizedDeathMessage(player);
+            String rawText = deathMessage.getString();
+
+            uniqueKey = rawText;
+            for (PlayerEntry p : players.values()) {
+                uniqueKey = uniqueKey.replace(p.getName(), "");
+            }
+            uniqueKey = uniqueKey.trim();
+        } else {
+            // New method: Use damage source type + entity type
+            uniqueKey = source.type().msgId();
+
+            // If killed by an entity, include the entity type for uniqueness
+            if (source.getEntity() != null) {
+                uniqueKey += ":" + source.getEntity().getType().getDescription().getString();
+            }
         }
-        uniqueKey = uniqueKey.trim();
 
         if (claimedItems.contains(uniqueKey)) {
             player.sendSystemMessage(Component.literal("❌ Someone's already claimed that one!").withStyle(style -> style.withColor(0xFF5555)));
@@ -118,9 +146,11 @@ public class LockoutGame {
         claimedItems.add(uniqueKey);
         entry.addClaim(uniqueKey);
 
-        // Broadcast point gain
+        // Broadcast point gain with death message
+        Component deathMessage = source.getLocalizedDeathMessage(player);
         broadcastToServer(player.level().getServer(),
-                Component.literal("⬛ " + entry.getName() + " got a point!").withStyle(style -> style.withColor(entry.getColor())));
+                Component.literal("⬛ " + entry.getName() + " got a point! ").withStyle(style -> style.withColor(entry.getColor()))
+                        .append(Component.literal("(" + deathMessage.getString() + ")").withStyle(style -> style.withColor(0xAAAAAA))));
 
         LockoutNetworking.broadcastState(player.level().getServer(), goal, new ArrayList<>(players.values()), mode);
 

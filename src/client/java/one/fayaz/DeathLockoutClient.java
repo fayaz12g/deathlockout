@@ -132,33 +132,35 @@ public class DeathLockoutClient implements ClientModInitializer {
             }
         }
 
-        // For death mode or fallback, check for keywords in the claim
-        // 1. Environmental
-        if (lower.contains("lava")) return new ItemStack(Items.LAVA_BUCKET);
-        if (lower.contains("water") || lower.contains("drown")) return new ItemStack(Items.WATER_BUCKET);
-        if (lower.contains("fire") || lower.contains("flame") || lower.contains("burnt") || lower.contains("burned")) return new ItemStack(Items.FLINT_AND_STEEL);
-        if (lower.contains("fall") || lower.contains("ground") || lower.contains("fell")) return new ItemStack(Items.FEATHER);
-        if (lower.contains("cactus") || lower.contains("prick")) return new ItemStack(Items.CACTUS);
-        if (lower.contains("berry") || lower.contains("bush")) return new ItemStack(Items.SWEET_BERRIES);
-        if (lower.contains("starve")) return new ItemStack(Items.ROTTEN_FLESH);
-        if (lower.contains("explosion") || lower.contains("blew up") || lower.contains("tnt")) return new ItemStack(Items.TNT);
-        if (lower.contains("magic") || lower.contains("potion")) return new ItemStack(Items.POTION);
-        if (lower.contains("withered")) return new ItemStack(Items.WITHER_ROSE);
-        if (lower.contains("anvil") || lower.contains("squashed")) return new ItemStack(Items.ANVIL);
-        if (lower.contains("arrow") || lower.contains("shot")) return new ItemStack(Items.ARROW);
-        if (lower.contains("trident")) return new ItemStack(Items.TRIDENT);
-        if (lower.contains("stalagmite") || lower.contains("impaled")) return new ItemStack(Items.POINTED_DRIPSTONE);
-        if (lower.contains("freeze") || lower.contains("frozen")) return new ItemStack(Items.POWDER_SNOW_BUCKET);
-        if (lower.contains("shriek")) return new ItemStack(Items.WARDEN_SPAWN_EGG);
-
-        // 2. Mobs (for death messages containing mob names)
+        // 1. Mobs (for death messages containing mob names)
         for (EntityType<?> type : BuiltInRegistries.ENTITY_TYPE) {
             String entityName = type.getDescription().getString().toLowerCase();
-            if (lower.contains(entityName)) {
+            if (lower.contains(" " + entityName)) {
                 SpawnEggItem egg = SpawnEggItem.byId(type);
                 if (egg != null) return new ItemStack(egg);
             }
         }
+
+        // For death mode or fallback, check for keywords in the claim
+        // 2. Environmental
+        if (lower.contains("discovered")) return new ItemStack(Items.MAGMA_BLOCK);
+        else if (lower.contains("lava")) return new ItemStack(Items.LAVA_BUCKET);
+        else if (lower.contains("suffocated")) return new ItemStack(Items.SAND);
+        else if (lower.contains("water") || lower.contains("drown")) return new ItemStack(Items.WATER_BUCKET);
+        else if (lower.contains("fire") || lower.contains("flame") || lower.contains("burnt") || lower.contains("burned")) return new ItemStack(Items.FLINT_AND_STEEL);
+        else if (lower.contains("fall") || lower.contains("ground") || lower.contains("fell")) return new ItemStack(Items.FEATHER);
+        else if (lower.contains("cactus") || lower.contains("prick")) return new ItemStack(Items.CACTUS);
+        else if (lower.contains("berry") || lower.contains("bush")) return new ItemStack(Items.SWEET_BERRIES);
+        else if (lower.contains("starve")) return new ItemStack(Items.ROTTEN_FLESH);
+        else if (lower.contains("explosion") || lower.contains("blew up") || lower.contains("tnt")) return new ItemStack(Items.TNT);
+        else if (lower.contains("magic") || lower.contains("potion")) return new ItemStack(Items.POTION);
+        else if (lower.contains("withered")) return new ItemStack(Items.WITHER_ROSE);
+        else if (lower.contains("anvil") || lower.contains("squashed")) return new ItemStack(Items.ANVIL);
+        else if (lower.contains("arrow") || lower.contains("shot")) return new ItemStack(Items.ARROW);
+        else if (lower.contains("trident")) return new ItemStack(Items.TRIDENT);
+        else if (lower.contains("stalagmite") || lower.contains("impaled")) return new ItemStack(Items.POINTED_DRIPSTONE);
+        else if (lower.contains("freeze") || lower.contains("frozen")) return new ItemStack(Items.POWDER_SNOW_BUCKET);
+        else if (lower.contains("shriek")) return new ItemStack(Items.WARDEN_SPAWN_EGG);
 
         // 3. Fallback
         return new ItemStack(clientMode.equals("KILLS") ? Items.IRON_SWORD : Items.PLAYER_HEAD);
