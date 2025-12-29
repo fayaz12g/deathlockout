@@ -1,10 +1,16 @@
 package one.fayaz;
 
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.Level;
 
 import java.util.*;
 
@@ -22,11 +28,15 @@ public class LockoutGame {
     }
 
     private boolean active = false;
-    private int goal = 0;
+    private boolean paused = false;
+    private String pausedPlayerName = "";
+    private int countdownTicks = 0;
+    private boolean isCountingDown = false;
+    private int goal = 5;
     private GameMode mode = GameMode.DEATH;
     private DeathMatchMode deathMatchMode = DeathMatchMode.SOURCE;
     private final Map<UUID, PlayerEntry> players = new LinkedHashMap<>();
-    private final Set<String> claimedItems = new HashSet<>(); // Used for both deaths and kills
+    private final Set<String> claimedItems = new HashSet<>();
 
     public void setGoal(int goal) {
         this.goal = goal;
@@ -48,6 +58,14 @@ public class LockoutGame {
         return deathMatchMode;
     }
 
+    public boolean isPaused() {
+        return paused;
+    }
+
+    public String getPausedPlayerName() {
+        return pausedPlayerName;
+    }
+
     public boolean addPlayer(ServerPlayer player, int color) {
         if (active) {
             player.sendSystemMessage(Component.literal("❌ Cannot add players while game is active!").withStyle(style -> style.withColor(0xFF5555)));
@@ -65,8 +83,31 @@ public class LockoutGame {
         return true;
     }
 
+    public boolean modifyPlayer(ServerPlayer player, int color) {
+        UUID uuid = player.getUUID();
+        PlayerEntry entry = players.get(uuid);
+
+        if (entry == null) {
+            return false;
+        }
+
+        // Create new entry with same UUID, name, and claims but new color
+        PlayerEntry newEntry = new PlayerEntry(uuid, entry.getName(), color, entry.getClaims());
+        players.put(uuid, newEntry);
+        return true;
+    }
+
+    public boolean removePlayer(ServerPlayer player) {
+        if (active) {
+            return false;
+        }
+
+        UUID uuid = player.getUUID();
+        return players.remove(uuid) != null;
+    }
+
     public void syncToPlayer(ServerPlayer player) {
-        LockoutNetworking.sendToPlayer(player, goal, new ArrayList<>(players.values()), mode);
+        LockoutNetworking.sendToPlayer(player, goal, new ArrayList<>(players.values()), mode, paused, pausedPlayerName);
     }
 
     public int canStart() {
@@ -86,25 +127,216 @@ public class LockoutGame {
 
         this.active = true;
         this.mode = mode;
+        this.paused = false;
+        this.pausedPlayerName = "";
         this.claimedItems.clear();
+        this.isCountingDown = true;
+        this.countdownTicks = 60; // 3 seconds at 20 ticks/second
 
         // Clear all player claim histories
         for (PlayerEntry entry : players.values()) {
             entry.getClaims().clear();
         }
 
+        // Prepare all players
+        for (UUID uuid : players.keySet()) {
+            ServerPlayer player = server.getPlayerList().getPlayer(uuid);
+            if (player != null) {
+                preparePlayer(player);
+                freezePlayer(player);
+            }
+        }
+
         String modeName = mode == GameMode.DEATH ? "Death" : "Kills";
-        broadcastToServer(server, Component.literal("🎮 " + modeName + " Lockout Started! Goal: " + goal).withStyle(style -> style.withColor(0x55FF55).withBold(true)));
-        LockoutNetworking.broadcastState(server, goal, new ArrayList<>(players.values()), mode);
+        broadcastToServer(server, Component.literal("🎮 " + modeName + " Lockout Starting...").withStyle(style -> style.withColor(0xFFFF55).withBold(true)));
+        LockoutNetworking.broadcastState(server, goal, new ArrayList<>(players.values()), mode, paused, pausedPlayerName);
+    }
+
+    public void tick(MinecraftServer server) {
+        if (!isCountingDown) return;
+
+        countdownTicks--;
+
+        // Broadcast countdown at specific intervals
+        if (countdownTicks == 60) { // 3
+            broadcastToServer(server, Component.literal("3").withStyle(style -> style.withColor(0xFF5555).withBold(true)));
+        } else if (countdownTicks == 40) { // 2
+            broadcastToServer(server, Component.literal("2").withStyle(style -> style.withColor(0xFFAA00).withBold(true)));
+        } else if (countdownTicks == 20) { // 1
+            broadcastToServer(server, Component.literal("1").withStyle(style -> style.withColor(0xFFFF55).withBold(true)));
+        } else if (countdownTicks == 0) { // GO!
+            broadcastToServer(server, Component.literal("GO!").withStyle(style -> style.withColor(0x55FF55).withBold(true)));
+            isCountingDown = false;
+
+            // Unfreeze all players
+            for (UUID uuid : players.keySet()) {
+                ServerPlayer player = server.getPlayerList().getPlayer(uuid);
+                if (player != null) {
+                    unfreezePlayer(player);
+                }
+            }
+        }
+    }
+
+    private void preparePlayer(ServerPlayer player) {
+        // Clear inventory
+        player.getInventory().clearContent();
+
+        // Heal and feed
+        player.setHealth(player.getMaxHealth());
+        player.getFoodData().setFoodLevel(20);
+        player.getFoodData().setSaturation(20.0f);
+
+        // Teleport to world spawn
+        var server = player.level().getServer();
+
+        // Teleport to world spawn
+        ServerLevel overworld = server.getLevel(Level.OVERWORLD);
+        BlockPos spawnPos = overworld.getRespawnData().globalPos().pos();
+
+        player.teleportTo(
+                spawnPos.getX() + 0.5,
+                spawnPos.getY(),
+                spawnPos.getZ() + 0.5
+        );
+
+        // Set to survival
+        player.setGameMode(GameType.SURVIVAL);
+
+        // clear effects
+        player.getActiveEffects().clear();
+
+        // clear levels
+        player.setExperiencePoints(0);
+    }
+
+    private void freezePlayer(ServerPlayer player) {
+        player.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, Integer.MAX_VALUE, 255, false, false));
+        player.addEffect(new MobEffectInstance(MobEffects.JUMP_BOOST, Integer.MAX_VALUE, 255, false, false));
+        player.addEffect(new MobEffectInstance(MobEffects.MINING_FATIGUE, Integer.MAX_VALUE, 255, false, false));
+    }
+
+    private void unfreezePlayer(ServerPlayer player) {
+        player.removeEffect(MobEffects.SLOWNESS);
+        player.removeEffect(MobEffects.JUMP_BOOST);
+        player.removeEffect(MobEffects.MINING_FATIGUE);
+    }
+
+    public void handlePause(MinecraftServer server) {
+        if (!active || paused) return;
+
+        // Pause the game
+        paused = true;
+
+        broadcastToServer(server, Component.literal("⏸ Game paused").withStyle(style -> style.withColor(0xFFAA00).withBold(true)));
+
+        // Freeze all players
+        for (UUID uuid : players.keySet()) {
+            ServerPlayer player = server.getPlayerList().getPlayer(uuid);
+            if (player != null) {
+                freezePlayer(player);
+            }
+        }
+
+        LockoutNetworking.broadcastState(server, goal, new ArrayList<>(players.values()), mode, paused, pausedPlayerName);
+    }
+
+    public void setMode(GameMode mode) {
+        this.mode = mode;
+    }
+
+    public void handleUnpause(MinecraftServer server) {
+        if (!active || !paused) return;
+
+        // Unpause the game
+        paused = false;
+        pausedPlayerName = "";
+
+        broadcastToServer(server, Component.literal("▶ Game resumed!").withStyle(style -> style.withColor(0x55FF55).withBold(true)));
+
+        // Unfreeze all players
+        for (UUID uuid : players.keySet()) {
+            ServerPlayer player = server.getPlayerList().getPlayer(uuid);
+            if (player != null) {
+                unfreezePlayer(player);
+            }
+        }
+
+        LockoutNetworking.broadcastState(server, goal, new ArrayList<>(players.values()), mode, paused, pausedPlayerName);
+    }
+
+    public void handlePlayerDisconnect(ServerPlayer player) {
+        if (!active || paused) return;
+
+        UUID uuid = player.getUUID();
+        if (!players.containsKey(uuid)) return;
+
+        // Pause the game
+        paused = true;
+        pausedPlayerName = player.getName().getString();
+
+        MinecraftServer server = player.level().getServer();
+        broadcastToServer(server, Component.literal("⏸ Game paused - waiting for " + pausedPlayerName + " to reconnect").withStyle(style -> style.withColor(0xFFAA00).withBold(true)));
+
+        // Freeze all other players
+        for (UUID otherUuid : players.keySet()) {
+            if (!otherUuid.equals(uuid)) {
+                ServerPlayer otherPlayer = server.getPlayerList().getPlayer(otherUuid);
+                if (otherPlayer != null) {
+                    freezePlayer(otherPlayer);
+                }
+            }
+        }
+
+        LockoutNetworking.broadcastState(server, goal, new ArrayList<>(players.values()), mode, paused, pausedPlayerName);
+    }
+
+    public void handlePlayerReconnect(ServerPlayer player) {
+        if (!active || !paused) return;
+
+        UUID uuid = player.getUUID();
+        if (!players.containsKey(uuid)) return;
+        if (!player.getName().getString().equals(pausedPlayerName)) return;
+
+        // Unpause the game
+        paused = false;
+        pausedPlayerName = "";
+
+        MinecraftServer server = player.level().getServer();
+        broadcastToServer(server, Component.literal("▶ Game resumed!").withStyle(style -> style.withColor(0x55FF55).withBold(true)));
+
+        // Unfreeze all players
+        for (UUID otherUuid : players.keySet()) {
+            ServerPlayer otherPlayer = server.getPlayerList().getPlayer(otherUuid);
+            if (otherPlayer != null) {
+                unfreezePlayer(otherPlayer);
+            }
+        }
+
+        LockoutNetworking.broadcastState(server, goal, new ArrayList<>(players.values()), mode, paused, pausedPlayerName);
     }
 
     public void stop(MinecraftServer server) {
+        // Unfreeze all players before stopping
+        if (isCountingDown || paused) {
+            for (UUID uuid : players.keySet()) {
+                ServerPlayer player = server.getPlayerList().getPlayer(uuid);
+                if (player != null) {
+                    unfreezePlayer(player);
+                }
+            }
+        }
+
         this.active = false;
+        this.paused = false;
+        this.pausedPlayerName = "";
+        this.isCountingDown = false;
+        this.countdownTicks = 0;
         this.players.clear();
         this.goal = 0;
         this.mode = GameMode.DEATH;
         this.deathMatchMode = DeathMatchMode.SOURCE;
-        LockoutNetworking.broadcastState(server, 0, new ArrayList<>(), GameMode.DEATH);
+        LockoutNetworking.broadcastState(server, 0, new ArrayList<>(), GameMode.DEATH, false, "");
     }
 
     public boolean isActive() {
@@ -112,7 +344,7 @@ public class LockoutGame {
     }
 
     public void handleDeath(ServerPlayer player, DamageSource source) {
-        if (!active || mode != GameMode.DEATH) return;
+        if (!active || paused || isCountingDown || mode != GameMode.DEATH) return;
 
         UUID uuid = player.getUUID();
         PlayerEntry entry = players.get(uuid);
@@ -121,9 +353,7 @@ public class LockoutGame {
 
         String uniqueKey;
 
-        // Choose matching method based on configuration
         if (deathMatchMode == DeathMatchMode.MESSAGE) {
-            // Original method: Use death message string with player names removed
             Component deathMessage = source.getLocalizedDeathMessage(player);
             String rawText = deathMessage.getString();
 
@@ -133,10 +363,8 @@ public class LockoutGame {
             }
             uniqueKey = uniqueKey.trim();
         } else {
-            // New method: Use damage source type + entity type
             uniqueKey = source.type().msgId();
 
-            // If killed by an entity, include the entity type for uniqueness
             if (source.getEntity() != null) {
                 uniqueKey += ":" + source.getEntity().getType().getDescription().getString();
             }
@@ -150,29 +378,40 @@ public class LockoutGame {
         claimedItems.add(uniqueKey);
         entry.addClaim(uniqueKey);
 
-        // Broadcast point gain with death message
         Component deathMessage = source.getLocalizedDeathMessage(player);
         broadcastToServer(player.level().getServer(),
                 Component.literal("⬛ " + entry.getName() + " got a point! ").withStyle(style -> style.withColor(entry.getColor()))
                         .append(Component.literal("(" + deathMessage.getString() + ")").withStyle(style -> style.withColor(0xAAAAAA))));
 
-        LockoutNetworking.broadcastState(player.level().getServer(), goal, new ArrayList<>(players.values()), mode);
+        LockoutNetworking.broadcastState(player.level().getServer(), goal, new ArrayList<>(players.values()), mode, paused, pausedPlayerName);
 
-        // Check for winner
         if (entry.getScore() >= goal) {
             win(player, entry);
         }
     }
 
+    /**
+     * Check if a color is already taken by another player
+     * @param color The color to check
+     * @return The name of the player with that color, or null if no one has it
+     */
+    public String getPlayerWithColor(int color) {
+        for (PlayerEntry entry : players.values()) {
+            if (entry.getColor() == color) {
+                return entry.getName();
+            }
+        }
+        return null;
+    }
+
     public void handleKill(ServerPlayer player, LivingEntity killed) {
-        if (!active || mode != GameMode.KILLS) return;
+        if (!active || paused || isCountingDown || mode != GameMode.KILLS) return;
 
         UUID uuid = player.getUUID();
         PlayerEntry entry = players.get(uuid);
 
         if (entry == null) return;
 
-        // Get the entity type name as the unique key
         String entityName = killed.getType().getDescription().getString();
 
         if (claimedItems.contains(entityName)) {
@@ -183,13 +422,11 @@ public class LockoutGame {
         claimedItems.add(entityName);
         entry.addClaim(entityName);
 
-        // Broadcast point gain
         broadcastToServer(player.level().getServer(),
                 Component.literal("⚔ " + entry.getName() + " killed a " + entityName + "!").withStyle(style -> style.withColor(entry.getColor())));
 
-        LockoutNetworking.broadcastState(player.level().getServer(), goal, new ArrayList<>(players.values()), mode);
+        LockoutNetworking.broadcastState(player.level().getServer(), goal, new ArrayList<>(players.values()), mode, paused, pausedPlayerName);
 
-        // Check for winner
         if (entry.getScore() >= goal) {
             win(player, entry);
         }

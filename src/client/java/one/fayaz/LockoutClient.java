@@ -6,6 +6,7 @@ import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -20,6 +21,9 @@ public class LockoutClient implements ClientModInitializer {
     private static int clientGoal = 0;
     private static List<PlayerData> clientPlayers = new ArrayList<>();
     private static String clientMode = "DEATH";
+    private static boolean clientPaused = false;
+    private static String clientPausedPlayerName = "";
+    private static boolean wasPaused = false; // Track previous pause state
 
     public static class PlayerData {
         public String name;
@@ -40,6 +44,8 @@ public class LockoutClient implements ClientModInitializer {
             context.client().execute(() -> {
                 clientGoal = payload.goal();
                 clientMode = payload.mode();
+                clientPaused = payload.paused();
+                clientPausedPlayerName = payload.pausedPlayerName();
                 clientPlayers.clear();
 
                 for (LockoutNetworking.PlayerData pd : payload.players()) {
@@ -66,8 +72,8 @@ public class LockoutClient implements ClientModInitializer {
 
         // --- Config ---
         int slotSize = 18;
-        int playerGap = 25; // Gap between players
-        int boxGap = 2; // Gap between boxes within a player
+        int playerGap = 25;
+        int boxGap = 2;
         int boxesToDraw = clientGoal - 1;
 
         // Calculate total width needed per player
@@ -82,6 +88,23 @@ public class LockoutClient implements ClientModInitializer {
         String goalText = modeText + " Goal: " + clientGoal;
         int textWidth = client.font.width(goalText);
         graphics.drawString(client.font, goalText, centerX - (textWidth / 2), topY - 12, 0xFFFFFF, true);
+
+        // Handle pause state with title overlay
+        if (clientPaused) {
+            // Just paused - show title
+            Component titleText = Component.literal("|| PAUSED").withStyle(style -> style.withColor(0xFFAA00).withBold(true));
+            Component subtitleText = Component.literal("Waiting for " + clientPausedPlayerName + " to reconnect").withStyle(style -> style.withColor(0xFFFFFF));
+
+            client.gui.setTitle(titleText);
+            client.gui.setSubtitle(subtitleText);
+            client.gui.setTimes(0, 100000, 10); // Fade in: 0, stay: long time, fade out: 10
+
+            wasPaused = true;
+        } else if (!clientPaused) {
+            // Just unpaused - clear title
+            client.gui.clearTitles();
+            wasPaused = false;
+        }
 
         // Draw each player's progress
         int currentX = startX;
@@ -99,9 +122,9 @@ public class LockoutClient implements ClientModInitializer {
 
                 if (i < player.claims.size()) {
                     // CLAIMED: Draw colored background + icon
-                    int bgColor = (player.color & 0xFFFFFF) | 0x80000000; // Semi-transparent version
+                    int bgColor = (player.color & 0xFFFFFF) | 0x80000000;
                     graphics.fill(x, y, x + slotSize, y + slotSize, bgColor);
-                    graphics.renderOutline(x, y, slotSize, slotSize, player.color | 0xFF000000); // Solid border
+                    graphics.renderOutline(x, y, slotSize, slotSize, player.color | 0xFF000000);
 
                     // Draw Icon
                     String claim = player.claims.get(i);
@@ -117,7 +140,6 @@ public class LockoutClient implements ClientModInitializer {
         }
     }
 
-    // --- LOGIC: Convert Claim String to Item ---
     private ItemStack getIconForClaim(String claim) {
         String lower = claim.toLowerCase();
 
@@ -132,8 +154,7 @@ public class LockoutClient implements ClientModInitializer {
             }
         }
 
-        // For death mode or fallback, check for keywords in the claim
-        // 1. Environmental
+        // For death mode or fallback, check for keywords
         if (lower.contains("discovered")) return new ItemStack(Items.MAGMA_BLOCK);
         else if (lower.contains("lava")) return new ItemStack(Items.LAVA_BUCKET);
         else if (lower.contains("suffocated")) return new ItemStack(Items.SAND);
@@ -152,9 +173,8 @@ public class LockoutClient implements ClientModInitializer {
         else if (lower.contains("stalagmite") || lower.contains("impaled")) return new ItemStack(Items.POINTED_DRIPSTONE);
         else if (lower.contains("freeze") || lower.contains("frozen")) return new ItemStack(Items.POWDER_SNOW_BUCKET);
         else if (lower.contains("shriek")) return new ItemStack(Items.WARDEN_SPAWN_EGG);
-
         else {
-            // 2. Mobs (for death messages containing mob names)
+            // Check for mob names
             for (EntityType<?> type : BuiltInRegistries.ENTITY_TYPE) {
                 String entityName = type.getDescription().getString().toLowerCase();
                 if (lower.contains(entityName)) {
@@ -163,7 +183,7 @@ public class LockoutClient implements ClientModInitializer {
                 }
             }
 
-            // 3. Fallback
+            // Fallback
             return new ItemStack(clientMode.equals("KILLS") ? Items.IRON_SWORD : Items.PLAYER_HEAD);
         }
     }

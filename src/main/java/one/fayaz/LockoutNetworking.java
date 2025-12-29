@@ -18,7 +18,7 @@ import java.util.UUID;
 
 public class LockoutNetworking {
     public static final CustomPacketPayload.Type<LockoutSyncPayload> SYNC_TYPE =
-            new CustomPacketPayload.Type<>(Identifier.fromNamespaceAndPath("deathlockout", "sync"));
+            new CustomPacketPayload.Type<>(Identifier.fromNamespaceAndPath("lockout", "sync"));
 
     public record PlayerData(UUID uuid, String name, int color, List<String> claims) {
         public static final StreamCodec<RegistryFriendlyByteBuf, PlayerData> CODEC = StreamCodec.composite(
@@ -30,11 +30,13 @@ public class LockoutNetworking {
         );
     }
 
-    public record LockoutSyncPayload(int goal, List<PlayerData> players, String mode) implements CustomPacketPayload {
+    public record LockoutSyncPayload(int goal, List<PlayerData> players, String mode, boolean paused, String pausedPlayerName) implements CustomPacketPayload {
         public static final StreamCodec<RegistryFriendlyByteBuf, LockoutSyncPayload> CODEC = StreamCodec.composite(
                 ByteBufCodecs.INT, LockoutSyncPayload::goal,
                 ByteBufCodecs.collection(ArrayList::new, PlayerData.CODEC), LockoutSyncPayload::players,
                 ByteBufCodecs.STRING_UTF8, LockoutSyncPayload::mode,
+                ByteBufCodecs.BOOL, LockoutSyncPayload::paused,
+                ByteBufCodecs.STRING_UTF8, LockoutSyncPayload::pausedPlayerName,
                 LockoutSyncPayload::new
         );
 
@@ -48,7 +50,7 @@ public class LockoutNetworking {
         PayloadTypeRegistry.playS2C().register(SYNC_TYPE, LockoutSyncPayload.CODEC);
     }
 
-    public static void sendToPlayer(ServerPlayer player, int goal, List<PlayerEntry> playerEntries, LockoutGame.GameMode mode) {
+    public static void sendToPlayer(ServerPlayer player, int goal, List<PlayerEntry> playerEntries, LockoutGame.GameMode mode, boolean paused, String pausedPlayerName) {
         List<PlayerData> playerDataList = new ArrayList<>();
         for (PlayerEntry entry : playerEntries) {
             playerDataList.add(new PlayerData(
@@ -59,11 +61,11 @@ public class LockoutNetworking {
             ));
         }
 
-        LockoutSyncPayload payload = new LockoutSyncPayload(goal, playerDataList, mode.toString());
+        LockoutSyncPayload payload = new LockoutSyncPayload(goal, playerDataList, mode.toString(), paused, pausedPlayerName);
         ServerPlayNetworking.send(player, payload);
     }
 
-    public static void broadcastState(MinecraftServer server, int goal, List<PlayerEntry> playerEntries, LockoutGame.GameMode mode) {
+    public static void broadcastState(MinecraftServer server, int goal, List<PlayerEntry> playerEntries, LockoutGame.GameMode mode, boolean paused, String pausedPlayerName) {
         if (server == null) return;
 
         List<PlayerData> playerDataList = new ArrayList<>();
@@ -76,7 +78,7 @@ public class LockoutNetworking {
             ));
         }
 
-        LockoutSyncPayload payload = new LockoutSyncPayload(goal, playerDataList, mode.toString());
+        LockoutSyncPayload payload = new LockoutSyncPayload(goal, playerDataList, mode.toString(), paused, pausedPlayerName);
 
         for (ServerPlayer player : PlayerLookup.all(server)) {
             ServerPlayNetworking.send(player, payload);
