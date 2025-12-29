@@ -204,8 +204,8 @@ public class Lockout implements ModInitializer {
                             .then(Commands.literal("armor")
                                     .then(Commands.argument("submode", StringArgumentType.word())
                                             .suggests((context, builder) -> {
-                                                builder.suggest("source");
-                                                builder.suggest("message");
+                                                builder.suggest("set");
+                                                builder.suggest("piece");
                                                 return builder.buildFuture();
                                             })
                                             .executes(ctx -> {
@@ -225,7 +225,6 @@ public class Lockout implements ModInitializer {
 
                                                 LockoutGame.INSTANCE.setMode(LockoutGame.GameMode.ARMOR);
                                                 LockoutGame.INSTANCE.setArmorMode(matchMode);
-                                                ctx.getSource().sendSystemMessage(Component.literal("✓ Mode set to: ARMOR SETS").withStyle(style -> style.withColor(0x55FF55)));
                                                 return 1;
                                             })
                                     )
