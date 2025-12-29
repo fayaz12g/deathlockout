@@ -2,6 +2,7 @@ package one.fayaz;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -11,6 +12,7 @@ import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.*;
 
@@ -37,6 +39,10 @@ public class LockoutGame {
     private DeathMatchMode deathMatchMode = DeathMatchMode.SOURCE;
     private final Map<UUID, PlayerEntry> players = new LinkedHashMap<>();
     private final Set<String> claimedItems = new HashSet<>();
+
+    // Custom spawn point fields
+    private Vec3 customSpawnPos = null;
+    private ResourceKey<Level> customSpawnDimension = null;
 
     public void setGoal(int goal) {
         this.goal = goal;
@@ -187,18 +193,26 @@ public class LockoutGame {
         player.getFoodData().setFoodLevel(20);
         player.getFoodData().setSaturation(20.0f);
 
-        // Teleport to world spawn
         var server = player.level().getServer();
 
-        // Teleport to world spawn
-        ServerLevel overworld = server.getLevel(Level.OVERWORLD);
-        BlockPos spawnPos = overworld.getRespawnData().globalPos().pos();
-
-        player.teleportTo(
-                spawnPos.getX() + 0.5,
-                spawnPos.getY(),
-                spawnPos.getZ() + 0.5
-        );
+        // Teleport to custom spawn or world spawn
+        if (customSpawnPos != null && customSpawnDimension != null) {
+            // Use custom spawn point
+            ServerLevel targetLevel = server.getLevel(customSpawnDimension);
+            if (targetLevel != null) {
+                player.teleportTo(
+                        customSpawnPos.x,
+                        customSpawnPos.y,
+                        customSpawnPos.z
+                );
+            } else {
+                // Fallback to overworld spawn if dimension doesn't exist
+                teleportToWorldSpawn(player, server);
+            }
+        } else {
+            // Default to world spawn
+            teleportToWorldSpawn(player, server);
+        }
 
         // Set to survival
         player.setGameMode(GameType.SURVIVAL);
@@ -208,6 +222,17 @@ public class LockoutGame {
 
         // clear levels
         player.setExperiencePoints(0);
+    }
+
+    private void teleportToWorldSpawn(ServerPlayer player, MinecraftServer server) {
+        ServerLevel overworld = server.getLevel(Level.OVERWORLD);
+        BlockPos spawnPos = overworld.getRespawnData().globalPos().pos();
+
+        player.teleportTo(
+                spawnPos.getX() + 0.5,
+                spawnPos.getY(),
+                spawnPos.getZ() + 0.5
+        );
     }
 
     private void freezePlayer(ServerPlayer player) {
@@ -316,8 +341,19 @@ public class LockoutGame {
         LockoutNetworking.broadcastState(server, goal, new ArrayList<>(players.values()), mode, paused, pausedPlayerName);
     }
 
-    public void setSpawn(ServerPlayer player) {
+    public void setSpawn(ServerPlayer player, Vec3 pos) {
+        this.customSpawnPos = pos;
+        this.customSpawnDimension = player.level().dimension();
+    }
 
+    public String getSpawnInfo() {
+        if (customSpawnPos != null && customSpawnDimension != null) {
+            String dimensionName = customSpawnDimension.identifier().getPath();
+            return String.format("Custom (%.1f, %.1f, %.1f in %s)",
+                    customSpawnPos.x, customSpawnPos.y, customSpawnPos.z, dimensionName);
+        } else {
+            return "World spawn (default)";
+        }
     }
 
     public void stop(MinecraftServer server) {
@@ -340,6 +376,8 @@ public class LockoutGame {
         this.goal = 0;
         this.mode = GameMode.DEATH;
         this.deathMatchMode = DeathMatchMode.SOURCE;
+        this.customSpawnPos = null;
+        this.customSpawnDimension = null;
         LockoutNetworking.broadcastState(server, 0, new ArrayList<>(), GameMode.DEATH, false, "");
     }
 

@@ -1,5 +1,6 @@
 package one.fayaz;
 
+import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import net.fabricmc.api.ModInitializer;
@@ -9,8 +10,10 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
+import net.minecraft.commands.arguments.coordinates.Vec3Argument;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.phys.Vec3;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -96,7 +99,7 @@ public class Lockout implements ModInitializer {
                     .then(Commands.literal("start")
                             .executes(ctx -> {
                                 if (LockoutGame.INSTANCE.isActive()) {
-                                    ctx.getSource().sendFailure(Component.literal("❌ Lockout already in progress. Use /lockout reset to end the current game."));
+                                    ctx.getSource().sendFailure(Component.literal("❌ Lockout already in progress. Use /lockout stop to end the current game."));
                                     return 0;
                                 }
 
@@ -126,6 +129,19 @@ public class Lockout implements ModInitializer {
                                         return 1;
                                     })
                             )
+                    )
+                    // /lockout stop
+                    .then(Commands.literal("stop")
+                        .executes(ctx -> {
+                            if (LockoutGame.INSTANCE.isActive()) {
+                                LockoutGame.INSTANCE.stop(ctx.getSource().getServer());
+                                ctx.getSource().sendSystemMessage(Component.literal("✓ Lockout ended").withStyle(style -> style.withColor(0x55FF55)));
+                                return 1;
+                            } else {
+                                ctx.getSource().sendFailure(Component.literal("❌ Game not started yet, nothing to stop."));
+                                return 0;
+                            }
+                        })
                     )
                     // /lockout pause
                     .then(Commands.literal("pause")
@@ -298,7 +314,7 @@ public class Lockout implements ModInitializer {
                                             })
                                     )
                             )
-                        )
+                    )
                     // /lockout reset
                     .then(Commands.literal("reset")
                             .executes(ctx -> {
@@ -307,11 +323,25 @@ public class Lockout implements ModInitializer {
                                 return 1;
                             })
                     )
-                    // /lockout spawnpoint
+                    // /lockout spawnpoint [x y z]
                     .then(Commands.literal("spawnpoint")
+                            // With coordinates
+                            .then(Commands.argument("pos", Vec3Argument.vec3())
+                                    .executes(ctx -> {
+                                        Vec3 pos = Vec3Argument.getVec3(ctx, "pos");
+                                        LockoutGame.INSTANCE.setSpawn(ctx.getSource().getPlayer(), pos);
+                                        ctx.getSource().sendSystemMessage(Component.literal("✓ Lockout spawnpoint set to: " +
+                                                String.format("%.1f, %.1f, %.1f", pos.x, pos.y, pos.z)).withStyle(style -> style.withColor(0x55FF55)));
+                                        return 1;
+                                    })
+                            )
+                            // Without coordinates - use current position
                             .executes(ctx -> {
-                                LockoutGame.INSTANCE.setSpawn(ctx.getSource().getPlayer());
-                                ctx.getSource().sendSystemMessage(Component.literal("✓ Lockout spawnpoint set."));
+                                ServerPlayer player = ctx.getSource().getPlayer();
+                                Vec3 pos = player.position();
+                                LockoutGame.INSTANCE.setSpawn(player, pos);
+                                ctx.getSource().sendSystemMessage(Component.literal("✓ Lockout spawnpoint set to your current location: " +
+                                        String.format("%.1f, %.1f, %.1f", pos.x, pos.y, pos.z)).withStyle(style -> style.withColor(0x55FF55)));
                                 return 1;
                             })
                     )
@@ -324,6 +354,7 @@ public class Lockout implements ModInitializer {
                                 boolean paused = LockoutGame.INSTANCE.isPaused();
                                 String mode = LockoutGame.INSTANCE.getMode().toString();
                                 String deathMatch = LockoutGame.INSTANCE.getDeathMatchMode().toString();
+                                String spawnInfo = LockoutGame.INSTANCE.getSpawnInfo();
 
                                 ctx.getSource().sendSystemMessage(Component.literal("--- Lockout Status ---"));
                                 ctx.getSource().sendSystemMessage(Component.literal("Active: " + (active ? "Yes" : "No")));
@@ -331,6 +362,7 @@ public class Lockout implements ModInitializer {
                                 ctx.getSource().sendSystemMessage(Component.literal("Mode: " + mode));
                                 ctx.getSource().sendSystemMessage(Component.literal("Death Matching: " + deathMatch));
                                 ctx.getSource().sendSystemMessage(Component.literal("Goal: " + goal));
+                                ctx.getSource().sendSystemMessage(Component.literal("Spawnpoint: " + spawnInfo));
                                 ctx.getSource().sendSystemMessage(Component.literal("Players: " + playerCount));
 
                                 for (PlayerEntry entry : LockoutGame.INSTANCE.getPlayers().values()) {
