@@ -55,7 +55,7 @@ public class DeathLockout implements ModInitializer {
         // 3. Register Kill Event (for kills mode)
         ServerLivingEntityEvents.AFTER_DEATH.register((entity, damageSource) -> {
             // Check if the killer is a player
-            if (damageSource.getEntity() instanceof ServerPlayer killer && !(entity instanceof ServerPlayer)) {
+            if (damageSource.getEntity() instanceof ServerPlayer killer) {
                 LockoutGame.INSTANCE.handleKill(killer, entity);
             }
         });
