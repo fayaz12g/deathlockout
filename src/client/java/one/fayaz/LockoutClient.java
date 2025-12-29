@@ -14,7 +14,7 @@ import net.minecraft.world.item.SpawnEggItem;
 import java.util.ArrayList;
 import java.util.List;
 
-public class DeathLockoutClient implements ClientModInitializer {
+public class LockoutClient implements ClientModInitializer {
 
     // Client-side state
     private static int clientGoal = 0;

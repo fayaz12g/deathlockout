@@ -1,8 +1,8 @@
 {
 	"schemaVersion": 1,
-	"id": "deathlockout",
+	"id": "lockout",
 	"version": "${version}",
-	"name": "Death Lockout",
+	"name": "Fayaz's Lockout",
 	"description": "Race to die in unique ways!",
 	"authors": [
 		"Fayaz"
@@ -12,20 +12,20 @@
 		"sources": "https://github.com/fayza12g/deathlockout"
 	},
 	"license": "CC0-1.0",
-	"icon": "assets/deathlockout/icon.png",
+	"icon": "assets/lockout/icon.png",
 	"environment": "*",
 	"entrypoints": {
 		"main": [
-			"one.fayaz.DeathLockout"
+			"one.fayaz.Lockout"
 		],
 		"client": [
-			"one.fayaz.DeathLockoutClient"
+			"one.fayaz.LockoutClient"
 		]
 	},
 	"mixins": [
-		"deathlockout.mixins.json",
+		"lockout.mixins.json",
 		{
-			"config": "deathlockout.client.mixins.json",
+			"config": "lockout.client.mixins.json",
 			"environment": "client"
 		}
 	],

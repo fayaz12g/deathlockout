@@ -9,15 +9,14 @@ import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.entity.LivingEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.Map;
 
-public class DeathLockout implements ModInitializer {
-    public static final String MOD_ID = "deathlockout";
+public class Lockout implements ModInitializer {
+    public static final String MOD_ID = "lockout";
     public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 
     // Named colors for convenience
@@ -109,8 +108,8 @@ public class DeathLockout implements ModInitializer {
                                     })
                             )
                     )
-                    // /lockout death <mode>
-                    .then(Commands.literal("death")
+                    // /lockout mode <mode>
+                    .then(Commands.literal("mode")
                             .then(Commands.argument("mode", StringArgumentType.word())
                                     .suggests((context, builder) -> {
                                         builder.suggest("message");
