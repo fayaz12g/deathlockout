@@ -1,29 +1,41 @@
 package one.fayaz;
 
-import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
+import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.commands.arguments.coordinates.Vec3Argument;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.Vec3;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
 public class Lockout implements ModInitializer {
     public static final String MOD_ID = "lockout";
     public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
-
+    private static final Set<Item> FOOD_ITEMS = BuiltInRegistries.ITEM.stream()
+            .filter(item -> item.components().has(DataComponents.FOOD))
+            .collect(Collectors.toSet());
     private static final Map<String, Integer> NAMED_COLORS = new HashMap<>();
     static {
         NAMED_COLORS.put("red", 0xFF5555);
@@ -42,21 +54,13 @@ public class Lockout implements ModInitializer {
     }
 
     private static final int[] DEFAULT_COLORS = {
-            0xFF5555, // red
-            0x5555FF, // blue
-            0x55FF55, // lime
-            0xFFFF55, // yellow
-            0xFF55FF, // magenta
-            0x55FFFF, // cyan
-            0xFFAA00, // orange
-            0xAA00AA, // purple
-            0x00AA00, // green
-            0xFFAAAA  // pink
+            0xFF5555, 0x5555FF, 0x55FF55, 0xFFFF55, 0xFF55FF,
+            0x55FFFF, 0xFFAA00, 0xAA00AA, 0x00AA00, 0xFFAAAA
     };
 
     @Override
     public void onInitialize() {
-        LOGGER.info("Initializing Death Lockout for 1.21.11");
+        LOGGER.info("Initializing Fayaz's Lockout for 1.21.11");
 
         // 1. Register Networking
         LockoutNetworking.registerCommon();
@@ -87,12 +91,28 @@ public class Lockout implements ModInitializer {
             LockoutGame.INSTANCE.handlePlayerDisconnect(handler.getPlayer());
         });
 
-        // 6. Register Server Tick Event (for countdown)
+        // 6. Register Server Tick Event (for countdown and armor checking)
         ServerTickEvents.END_SERVER_TICK.register(server -> {
             LockoutGame.INSTANCE.tick(server);
         });
 
-        // 7. Register Commands
+        // 8. Food tracking
+        net.fabricmc.fabric.api.event.player.UseItemCallback.EVENT.register((player, world, hand) -> {
+            if (player instanceof ServerPlayer serverPlayer) {
+                ItemStack stack = serverPlayer.getItemInHand(hand);
+
+                // Check if item is food
+                if (FOOD_ITEMS.contains(stack.getItem())) {
+                    // Schedule for next tick to ensure item is consumed
+                    serverPlayer.level().getServer().execute(() -> {
+                        LockoutGame.INSTANCE.handleFood(serverPlayer, stack.copy());
+                    });
+                }
+            }
+            return InteractionResult.PASS;
+        });
+
+        // 9. Register Commands
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
             dispatcher.register(Commands.literal("lockout")
                     // /lockout start
@@ -109,11 +129,10 @@ public class Lockout implements ModInitializer {
                                     return 0;
                                 }
                                 else if (canStart < 2) {
-                                    ctx.getSource().sendFailure(Component.literal("❌ Need at least " + (2 - canStart) + " more player(s) to start. Add them with /lockout add <player> <color>"));
+                                    ctx.getSource().sendFailure(Component.literal("❌ Need at least " + (2 - canStart) + " more player(s) to start."));
                                     return 0;
                                 }
 
-                                // Use the pre-configured mode
                                 LockoutGame.GameMode mode = LockoutGame.INSTANCE.getMode();
                                 LockoutGame.INSTANCE.start(ctx.getSource().getServer(), mode);
                                 return 1;
@@ -132,16 +151,16 @@ public class Lockout implements ModInitializer {
                     )
                     // /lockout stop
                     .then(Commands.literal("stop")
-                        .executes(ctx -> {
-                            if (LockoutGame.INSTANCE.isActive()) {
-                                LockoutGame.INSTANCE.stop(ctx.getSource().getServer());
-                                ctx.getSource().sendSystemMessage(Component.literal("✓ Lockout ended").withStyle(style -> style.withColor(0x55FF55)));
-                                return 1;
-                            } else {
-                                ctx.getSource().sendFailure(Component.literal("❌ Game not started yet, nothing to stop."));
-                                return 0;
-                            }
-                        })
+                            .executes(ctx -> {
+                                if (LockoutGame.INSTANCE.isActive()) {
+                                    LockoutGame.INSTANCE.stop(ctx.getSource().getServer());
+                                    ctx.getSource().sendSystemMessage(Component.literal("✓ Lockout ended").withStyle(style -> style.withColor(0x55FF55)));
+                                    return 1;
+                                } else {
+                                    ctx.getSource().sendFailure(Component.literal("❌ Game not started yet, nothing to stop."));
+                                    return 0;
+                                }
+                            })
                     )
                     // /lockout pause
                     .then(Commands.literal("pause")
@@ -151,7 +170,7 @@ public class Lockout implements ModInitializer {
                                     return 0;
                                 }
                                 if (LockoutGame.INSTANCE.isPaused()) {
-                                    ctx.getSource().sendFailure(Component.literal("❌ Game is already paused! Use '/lockout unpause' to resume."));
+                                    ctx.getSource().sendFailure(Component.literal("❌ Game is already paused!"));
                                     return 0;
                                 }
                                 LockoutGame.INSTANCE.handlePause(ctx.getSource().getServer());
@@ -173,9 +192,8 @@ public class Lockout implements ModInitializer {
                                 return 1;
                             })
                     )
-                    // /lockout mode <kills|death> [submode]
+                    // /lockout mode
                     .then(Commands.literal("mode")
-                            // /lockout mode kills
                             .then(Commands.literal("kills")
                                     .executes(ctx -> {
                                         LockoutGame.INSTANCE.setMode(LockoutGame.GameMode.KILLS);
@@ -183,7 +201,49 @@ public class Lockout implements ModInitializer {
                                         return 1;
                                     })
                             )
-                            // /lockout mode death <source|message>
+                            .then(Commands.literal("armor")
+                                    .then(Commands.argument("submode", StringArgumentType.word())
+                                            .suggests((context, builder) -> {
+                                                builder.suggest("source");
+                                                builder.suggest("message");
+                                                return builder.buildFuture();
+                                            })
+                                            .executes(ctx -> {
+                                                String submodeStr = StringArgumentType.getString(ctx, "submode").toLowerCase();
+                                                LockoutGame.ArmorMode matchMode;
+
+                                                if (submodeStr.equals("set")) {
+                                                    matchMode = LockoutGame.ArmorMode.SET;
+                                                    ctx.getSource().sendSystemMessage(Component.literal("✓ Mode set to: ARMOR (SET)").withStyle(style -> style.withColor(0x55FF55)));
+                                                } else if (submodeStr.equals("piece")) {
+                                                    matchMode = LockoutGame.ArmorMode.PIECE;
+                                                    ctx.getSource().sendSystemMessage(Component.literal("✓ Mode set to: ARMOR (PIECE)").withStyle(style -> style.withColor(0x55FF55)));
+                                                } else {
+                                                    ctx.getSource().sendFailure(Component.literal("❌ Invalid submode! Use 'set' or 'piece'"));
+                                                    return 0;
+                                                }
+
+                                                LockoutGame.INSTANCE.setMode(LockoutGame.GameMode.ARMOR);
+                                                LockoutGame.INSTANCE.setArmorMode(matchMode);
+                                                ctx.getSource().sendSystemMessage(Component.literal("✓ Mode set to: ARMOR SETS").withStyle(style -> style.withColor(0x55FF55)));
+                                                return 1;
+                                            })
+                                    )
+                            )
+                            .then(Commands.literal("advancements")
+                                    .executes(ctx -> {
+                                        LockoutGame.INSTANCE.setMode(LockoutGame.GameMode.ADVANCEMENTS);
+                                        ctx.getSource().sendSystemMessage(Component.literal("✓ Mode set to: ADVANCEMENTS").withStyle(style -> style.withColor(0x55FF55)));
+                                        return 1;
+                                    })
+                            )
+                            .then(Commands.literal("foods")
+                                    .executes(ctx -> {
+                                        LockoutGame.INSTANCE.setMode(LockoutGame.GameMode.FOODS);
+                                        ctx.getSource().sendSystemMessage(Component.literal("✓ Mode set to: FOODS").withStyle(style -> style.withColor(0x55FF55)));
+                                        return 1;
+                                    })
+                            )
                             .then(Commands.literal("death")
                                     .then(Commands.argument("submode", StringArgumentType.word())
                                             .suggests((context, builder) -> {
@@ -197,10 +257,10 @@ public class Lockout implements ModInitializer {
 
                                                 if (submodeStr.equals("source")) {
                                                     matchMode = LockoutGame.DeathMatchMode.SOURCE;
-                                                    ctx.getSource().sendSystemMessage(Component.literal("✓ Mode set to: DEATH (SOURCE - damage types)").withStyle(style -> style.withColor(0x55FF55)));
+                                                    ctx.getSource().sendSystemMessage(Component.literal("✓ Mode set to: DEATH (SOURCE)").withStyle(style -> style.withColor(0x55FF55)));
                                                 } else if (submodeStr.equals("message")) {
                                                     matchMode = LockoutGame.DeathMatchMode.MESSAGE;
-                                                    ctx.getSource().sendSystemMessage(Component.literal("✓ Mode set to: DEATH (MESSAGE - raw death messages)").withStyle(style -> style.withColor(0x55FF55)));
+                                                    ctx.getSource().sendSystemMessage(Component.literal("✓ Mode set to: DEATH (MESSAGE)").withStyle(style -> style.withColor(0x55FF55)));
                                                 } else {
                                                     ctx.getSource().sendFailure(Component.literal("❌ Invalid submode! Use 'source' or 'message'"));
                                                     return 0;
@@ -213,11 +273,10 @@ public class Lockout implements ModInitializer {
                                     )
                             )
                     )
+                    // /lockout player
                     .then(Commands.literal("player")
-                            // /lockout player add <player> [color]
                             .then(Commands.literal("add")
                                     .then(Commands.argument("player", EntityArgument.player())
-                                            // With color specified
                                             .then(Commands.argument("color", StringArgumentType.word())
                                                     .suggests((context, builder) -> {
                                                         for (String colorName : NAMED_COLORS.keySet()) {
@@ -231,7 +290,7 @@ public class Lockout implements ModInitializer {
 
                                                         int color = parseColor(colorStr);
                                                         if (color == -1) {
-                                                            ctx.getSource().sendFailure(Component.literal("❌ Invalid color! Use hex (#FF5555) or name (red, blue, etc.)"));
+                                                            ctx.getSource().sendFailure(Component.literal("❌ Invalid color!"));
                                                             return 0;
                                                         }
 
@@ -247,19 +306,17 @@ public class Lockout implements ModInitializer {
                                                         return 1;
                                                     })
                                             )
-                                            // Without color specified - use default
                                             .executes(ctx -> {
                                                 ServerPlayer player = EntityArgument.getPlayer(ctx, "player");
                                                 int color = getNextAvailableColor();
 
                                                 if (LockoutGame.INSTANCE.addPlayer(player, color)) {
-                                                    ctx.getSource().sendSystemMessage(Component.literal("✓ Added " + player.getName().getString() + " (auto-color)").withStyle(style -> style.withColor(color)));
+                                                    ctx.getSource().sendSystemMessage(Component.literal("✓ Added " + player.getName().getString()).withStyle(style -> style.withColor(color)));
                                                 }
                                                 return 1;
                                             })
                                     )
                             )
-                            // /lockout player modify <player> <color>
                             .then(Commands.literal("modify")
                                     .then(Commands.argument("player", EntityArgument.player())
                                             .then(Commands.argument("color", StringArgumentType.word())
@@ -275,7 +332,7 @@ public class Lockout implements ModInitializer {
 
                                                         int color = parseColor(colorStr);
                                                         if (color == -1) {
-                                                            ctx.getSource().sendFailure(Component.literal("❌ Invalid color! Use hex (#FF5555) or name (red, blue, etc.)"));
+                                                            ctx.getSource().sendFailure(Component.literal("❌ Invalid color!"));
                                                             return 0;
                                                         }
 
@@ -286,10 +343,10 @@ public class Lockout implements ModInitializer {
                                                         }
 
                                                         if (LockoutGame.INSTANCE.modifyPlayer(player, color)) {
-                                                            ctx.getSource().sendSystemMessage(Component.literal("✓ Modified " + player.getName().getString() + " color").withStyle(style -> style.withColor(color)));
+                                                            ctx.getSource().sendSystemMessage(Component.literal("✓ Modified " + player.getName().getString()).withStyle(style -> style.withColor(color)));
                                                             LockoutGame.INSTANCE.syncToPlayer(player);
                                                         } else {
-                                                            ctx.getSource().sendFailure(Component.literal("❌ Player not in lockout game!"));
+                                                            ctx.getSource().sendFailure(Component.literal("❌ Player not in game!"));
                                                             return 0;
                                                         }
                                                         return 1;
@@ -297,17 +354,15 @@ public class Lockout implements ModInitializer {
                                             )
                                     )
                             )
-                            // /lockout player remove <player>
                             .then(Commands.literal("remove")
                                     .then(Commands.argument("player", EntityArgument.player())
                                             .executes(ctx -> {
                                                 ServerPlayer player = EntityArgument.getPlayer(ctx, "player");
 
                                                 if (LockoutGame.INSTANCE.removePlayer(player)) {
-                                                    ctx.getSource().sendSystemMessage(Component.literal("✓ Removed " + player.getName().getString() + " from lockout").withStyle(style -> style.withColor(0x55FF55)));
-                                                    player.sendSystemMessage(Component.literal("✓ You were removed from the lockout game").withStyle(style -> style.withColor(0xFFAA00)));
+                                                    ctx.getSource().sendSystemMessage(Component.literal("✓ Removed " + player.getName().getString()).withStyle(style -> style.withColor(0x55FF55)));
                                                 } else {
-                                                    ctx.getSource().sendFailure(Component.literal("❌ Cannot remove player (not in game or game is active)"));
+                                                    ctx.getSource().sendFailure(Component.literal("❌ Cannot remove player"));
                                                     return 0;
                                                 }
                                                 return 1;
@@ -319,29 +374,25 @@ public class Lockout implements ModInitializer {
                     .then(Commands.literal("reset")
                             .executes(ctx -> {
                                 LockoutGame.INSTANCE.stop(ctx.getSource().getServer());
-                                ctx.getSource().sendSystemMessage(Component.literal("✓ Lockout reset."));
+                                ctx.getSource().sendSystemMessage(Component.literal("✓ Lockout reset"));
                                 return 1;
                             })
                     )
-                    // /lockout spawnpoint [x y z]
+                    // /lockout spawnpoint
                     .then(Commands.literal("spawnpoint")
-                            // With coordinates
                             .then(Commands.argument("pos", Vec3Argument.vec3())
                                     .executes(ctx -> {
                                         Vec3 pos = Vec3Argument.getVec3(ctx, "pos");
                                         LockoutGame.INSTANCE.setSpawn(ctx.getSource().getPlayer(), pos);
-                                        ctx.getSource().sendSystemMessage(Component.literal("✓ Lockout spawnpoint set to: " +
-                                                String.format("%.1f, %.1f, %.1f", pos.x, pos.y, pos.z)).withStyle(style -> style.withColor(0x55FF55)));
+                                        ctx.getSource().sendSystemMessage(Component.literal("✓ Spawnpoint set").withStyle(style -> style.withColor(0x55FF55)));
                                         return 1;
                                     })
                             )
-                            // Without coordinates - use current position
                             .executes(ctx -> {
                                 ServerPlayer player = ctx.getSource().getPlayer();
                                 Vec3 pos = player.position();
                                 LockoutGame.INSTANCE.setSpawn(player, pos);
-                                ctx.getSource().sendSystemMessage(Component.literal("✓ Lockout spawnpoint set to your current location: " +
-                                        String.format("%.1f, %.1f, %.1f", pos.x, pos.y, pos.z)).withStyle(style -> style.withColor(0x55FF55)));
+                                ctx.getSource().sendSystemMessage(Component.literal("✓ Spawnpoint set to current location").withStyle(style -> style.withColor(0x55FF55)));
                                 return 1;
                             })
                     )
@@ -353,20 +404,18 @@ public class Lockout implements ModInitializer {
                                 boolean active = LockoutGame.INSTANCE.isActive();
                                 boolean paused = LockoutGame.INSTANCE.isPaused();
                                 String mode = LockoutGame.INSTANCE.getMode().toString();
-                                String deathMatch = LockoutGame.INSTANCE.getDeathMatchMode().toString();
                                 String spawnInfo = LockoutGame.INSTANCE.getSpawnInfo();
 
                                 ctx.getSource().sendSystemMessage(Component.literal("--- Lockout Status ---"));
                                 ctx.getSource().sendSystemMessage(Component.literal("Active: " + (active ? "Yes" : "No")));
-                                ctx.getSource().sendSystemMessage(Component.literal("Paused: " + (paused ? "Yes (" + LockoutGame.INSTANCE.getPausedPlayerName() + ")" : "No")));
+                                ctx.getSource().sendSystemMessage(Component.literal("Paused: " + (paused ? "Yes" : "No")));
                                 ctx.getSource().sendSystemMessage(Component.literal("Mode: " + mode));
-                                ctx.getSource().sendSystemMessage(Component.literal("Death Matching: " + deathMatch));
                                 ctx.getSource().sendSystemMessage(Component.literal("Goal: " + goal));
                                 ctx.getSource().sendSystemMessage(Component.literal("Spawnpoint: " + spawnInfo));
                                 ctx.getSource().sendSystemMessage(Component.literal("Players: " + playerCount));
 
                                 for (PlayerEntry entry : LockoutGame.INSTANCE.getPlayers().values()) {
-                                    ctx.getSource().sendSystemMessage(Component.literal("  - " + entry.getName() + " (" + entry.getScore() + " claims)").withStyle(style -> style.withColor(entry.getColor())));
+                                    ctx.getSource().sendSystemMessage(Component.literal("  - " + entry.getName() + " (" + entry.getScore() + ")").withStyle(style -> style.withColor(entry.getColor())));
                                 }
 
                                 return 1;
@@ -382,7 +431,6 @@ public class Lockout implements ModInitializer {
                 return color;
             }
         }
-        // If all default colors taken, generate a random one
         return 0x555555 + (int)(Math.random() * 0xAAAAAA);
     }
 

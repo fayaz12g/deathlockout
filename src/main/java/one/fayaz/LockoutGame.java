@@ -1,6 +1,8 @@
 package one.fayaz;
 
+import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
@@ -9,7 +11,12 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.equipment.ArmorMaterial;
+import net.minecraft.world.item.equipment.ArmorType;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
@@ -19,14 +26,24 @@ import java.util.*;
 public class LockoutGame {
     public static final LockoutGame INSTANCE = new LockoutGame();
 
+    private static final Map<UUID, ItemStack[]> LAST_ARMOR = new HashMap<>();
+
     public enum GameMode {
         DEATH,
-        KILLS
+        KILLS,
+        ARMOR,
+        ADVANCEMENTS,
+        FOODS
     }
 
     public enum DeathMatchMode {
-        MESSAGE,  // Match by death message string (original behavior)
-        SOURCE    // Match by damage source type (more reliable)
+        MESSAGE,
+        SOURCE
+    }
+
+    public enum ArmorMode {
+        SET,
+        PIECE
     }
 
     private boolean active = false;
@@ -34,13 +51,14 @@ public class LockoutGame {
     private String pausedPlayerName = "";
     private int countdownTicks = 0;
     private boolean isCountingDown = false;
+    private int armorCheckTicks = 0; // For periodic armor checking
     private int goal = 5;
     private GameMode mode = GameMode.DEATH;
+    private ArmorMode armorMode = ArmorMode.SET;
     private DeathMatchMode deathMatchMode = DeathMatchMode.SOURCE;
     private final Map<UUID, PlayerEntry> players = new LinkedHashMap<>();
     private final Set<String> claimedItems = new HashSet<>();
 
-    // Custom spawn point fields
     private Vec3 customSpawnPos = null;
     private ResourceKey<Level> customSpawnDimension = null;
 
@@ -56,8 +74,20 @@ public class LockoutGame {
         return mode;
     }
 
+    public void setMode(GameMode mode) {
+        this.mode = mode;
+    }
+
+    public void setArmorMode(ArmorMode armorMode) {
+        this.armorMode = armorMode;
+    }
+
     public void setDeathMatchMode(DeathMatchMode deathMatchMode) {
         this.deathMatchMode = deathMatchMode;
+    }
+
+    public ArmorMode getArmorMode() {
+        return armorMode;
     }
 
     public DeathMatchMode getDeathMatchMode() {
@@ -85,7 +115,7 @@ public class LockoutGame {
         }
 
         players.put(uuid, new PlayerEntry(uuid, player.getName().getString(), color));
-        player.sendSystemMessage(Component.literal("✓ Added to lockout with color!").withStyle(style -> style.withColor(0x55FF55)));
+        player.sendSystemMessage(Component.literal("✓ Added to lockout!").withStyle(style -> style.withColor(0x55FF55)));
         return true;
     }
 
@@ -97,7 +127,6 @@ public class LockoutGame {
             return false;
         }
 
-        // Create new entry with same UUID, name, and claims but new color
         PlayerEntry newEntry = new PlayerEntry(uuid, entry.getName(), color, entry.getClaims());
         players.put(uuid, newEntry);
         return true;
@@ -120,9 +149,7 @@ public class LockoutGame {
         if (goal < 1) {
             return -1;
         }
-        else {
-            return players.size();
-        }
+        return players.size();
     }
 
     public void start(MinecraftServer server, GameMode mode) {
@@ -137,14 +164,13 @@ public class LockoutGame {
         this.pausedPlayerName = "";
         this.claimedItems.clear();
         this.isCountingDown = true;
-        this.countdownTicks = 60; // 3 seconds at 20 ticks/second
+        this.countdownTicks = 60;
+        this.armorCheckTicks = 0;
 
-        // Clear all player claim histories
         for (PlayerEntry entry : players.values()) {
             entry.getClaims().clear();
         }
 
-        // Prepare all players
         for (UUID uuid : players.keySet()) {
             ServerPlayer player = server.getPlayerList().getPlayer(uuid);
             if (player != null) {
@@ -153,91 +179,293 @@ public class LockoutGame {
             }
         }
 
-        String modeName = mode == GameMode.DEATH ? "Death" : "Kills";
+        String modeName = switch (mode) {
+            case DEATH -> "Death";
+            case KILLS -> "Kills";
+            case ARMOR -> "Armor Sets";
+            case ADVANCEMENTS -> "Advancements";
+            case FOODS -> "Foods";
+        };
+
         broadcastToServer(server, Component.literal("🎮 " + modeName + " Lockout Starting...").withStyle(style -> style.withColor(0xFFFF55).withBold(true)));
         LockoutNetworking.broadcastState(server, goal, new ArrayList<>(players.values()), mode, paused, pausedPlayerName);
     }
 
     public void tick(MinecraftServer server) {
-        if (!isCountingDown) return;
+        // Handle countdown
+        if (isCountingDown) {
+            countdownTicks--;
 
-        countdownTicks--;
+            if (countdownTicks == 60) {
+                broadcastToServer(server, Component.literal("3").withStyle(style -> style.withColor(0xFF5555).withBold(true)));
+            } else if (countdownTicks == 40) {
+                broadcastToServer(server, Component.literal("2").withStyle(style -> style.withColor(0xFFAA00).withBold(true)));
+            } else if (countdownTicks == 20) {
+                broadcastToServer(server, Component.literal("1").withStyle(style -> style.withColor(0xFFFF55).withBold(true)));
+            } else if (countdownTicks == 0) {
+                broadcastToServer(server, Component.literal("GO!").withStyle(style -> style.withColor(0x55FF55).withBold(true)));
+                isCountingDown = false;
 
-        // Broadcast countdown at specific intervals
-        if (countdownTicks == 60) { // 3
-            broadcastToServer(server, Component.literal("3").withStyle(style -> style.withColor(0xFF5555).withBold(true)));
-        } else if (countdownTicks == 40) { // 2
-            broadcastToServer(server, Component.literal("2").withStyle(style -> style.withColor(0xFFAA00).withBold(true)));
-        } else if (countdownTicks == 20) { // 1
-            broadcastToServer(server, Component.literal("1").withStyle(style -> style.withColor(0xFFFF55).withBold(true)));
-        } else if (countdownTicks == 0) { // GO!
-            broadcastToServer(server, Component.literal("GO!").withStyle(style -> style.withColor(0x55FF55).withBold(true)));
-            isCountingDown = false;
-
-            // Unfreeze all players
-            for (UUID uuid : players.keySet()) {
-                ServerPlayer player = server.getPlayerList().getPlayer(uuid);
-                if (player != null) {
-                    unfreezePlayer(player);
+                for (UUID uuid : players.keySet()) {
+                    ServerPlayer player = server.getPlayerList().getPlayer(uuid);
+                    if (player != null) {
+                        unfreezePlayer(player);
+                    }
                 }
+            }
+            return;
+        }
+        // Check armor every 20 ticks (1 second) if in armor mode
+        if (active && !paused && mode == GameMode.ARMOR) {
+            armorCheckTicks++;
+            if (armorCheckTicks >= 20) {
+                armorCheckTicks = 0;
+                checkAllPlayersArmor(server);
             }
         }
     }
 
-    private void preparePlayer(ServerPlayer player) {
-        // Clear inventory
-        player.getInventory().clearContent();
+    private void checkAllPlayersArmor(MinecraftServer server) {
+        for (UUID uuid : players.keySet()) {
+            ServerPlayer player = server.getPlayerList().getPlayer(uuid);
+            if (player != null) {
+                checkPlayerArmor(player);
+            }
+        }
+    }
 
-        // Heal and feed
+    public static boolean isArmorPiece(ItemStack stack, EquipmentSlot slot) {
+        if (stack.isEmpty()) return false;
+
+        String id = BuiltInRegistries.ITEM.getKey(stack.getItem()).getPath();
+
+        return switch (slot) {
+            case HEAD  -> id.contains("helmet");
+            case CHEST -> id.contains("chestplate");
+            case LEGS  -> id.contains("leggings");
+            case FEET  -> id.contains("boots");
+            default    -> false;
+        };
+    }
+
+    public static String getArmorMaterialName(ItemStack stack) {
+        String id = BuiltInRegistries.ITEM.getKey(stack.getItem()).getPath();
+
+        if (id.contains("netherite")) return "Netherite";
+        if (id.contains("diamond"))   return "Diamond";
+        if (id.contains("gold"))      return "Gold";
+        if (id.contains("iron"))      return "Iron";
+        if (id.contains("chainmail")) return "Chainmail";
+        if (id.contains("leather"))   return "Leather";
+
+        return "Unknown";
+    }
+
+    public void checkPlayerArmor(ServerPlayer player) {
+        UUID uuid = player.getUUID();
+        PlayerEntry entry = players.get(uuid);
+        if (entry == null) return;
+
+        ItemStack helmet = player.getItemBySlot(EquipmentSlot.HEAD);
+        ItemStack chestplate = player.getItemBySlot(EquipmentSlot.CHEST);
+        ItemStack leggings = player.getItemBySlot(EquipmentSlot.LEGS);
+        ItemStack boots = player.getItemBySlot(EquipmentSlot.FEET);
+
+        if (this.armorMode == ArmorMode.SET) {
+            checkArmorSet(player, entry, helmet, chestplate, leggings, boots);
+        } else if (this.armorMode == ArmorMode.PIECE) {
+            checkArmorPieces(player, entry, helmet, chestplate, leggings, boots);
+        }
+    }
+
+    private void checkArmorSet(ServerPlayer player, PlayerEntry entry, ItemStack helmet, ItemStack chestplate, ItemStack leggings, ItemStack boots) {
+        // All slots must be filled
+        if (helmet.isEmpty() || chestplate.isEmpty() || leggings.isEmpty() || boots.isEmpty()) {
+            return;
+        }
+
+        // Ensure all armor slots contain armor
+        if (!isArmorPiece(helmet, EquipmentSlot.HEAD) ||
+                !isArmorPiece(chestplate, EquipmentSlot.CHEST) ||
+                !isArmorPiece(leggings, EquipmentSlot.LEGS) ||
+                !isArmorPiece(boots, EquipmentSlot.FEET)) {
+            return;
+        }
+
+        String materialName = getArmorMaterialName(helmet);
+
+        // Check that all pieces match
+        if (!materialName.equals(getArmorMaterialName(chestplate)) ||
+                !materialName.equals(getArmorMaterialName(leggings)) ||
+                !materialName.equals(getArmorMaterialName(boots))) {
+            return;
+        }
+
+        // Already claimed
+        if (claimedItems.contains(materialName)) {
+            return;
+        }
+
+        // Claim the armor set
+        claimedItems.add(materialName);
+        entry.addClaim(materialName);
+
+        broadcastToServer(
+                player.level().getServer(),
+                Component.literal("🛡 " + entry.getName() + " completed " + materialName + " armor set!")
+                        .withStyle(style -> style.withColor(entry.getColor()))
+        );
+
+        LockoutNetworking.broadcastState(
+                player.level().getServer(),
+                goal,
+                new ArrayList<>(players.values()),
+                mode,
+                paused,
+                pausedPlayerName
+        );
+
+        if (entry.getScore() >= goal) {
+            win(player, entry);
+        }
+    }
+
+    private void checkArmorPieces(ServerPlayer player, PlayerEntry entry, ItemStack helmet, ItemStack chestplate, ItemStack leggings, ItemStack boots) {
+        // Check each piece individually
+        ItemStack[] armorPieces = {helmet, chestplate, leggings, boots};
+        EquipmentSlot[] slots = {EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET};
+
+        for (int i = 0; i < armorPieces.length; i++) {
+            ItemStack piece = armorPieces[i];
+            EquipmentSlot slot = slots[i];
+
+            // Skip empty or non-armor slots
+            if (piece.isEmpty() || !isArmorPiece(piece, slot)) {
+                continue;
+            }
+
+            String materialName = getArmorMaterialName(piece);
+
+            // Skip if already claimed
+            if (claimedItems.contains(materialName)) {
+                continue;
+            }
+
+            // Claim this armor material
+            claimedItems.add(materialName);
+            entry.addClaim(materialName);
+
+            broadcastToServer(
+                    player.level().getServer(),
+                    Component.literal("🛡 " + entry.getName() + " got " + materialName + " armor!")
+                            .withStyle(style -> style.withColor(entry.getColor()))
+            );
+
+            LockoutNetworking.broadcastState(
+                    player.level().getServer(),
+                    goal,
+                    new ArrayList<>(players.values()),
+                    mode,
+                    paused,
+                    pausedPlayerName
+            );
+
+            if (entry.getScore() >= goal) {
+                win(player, entry);
+                return; // Stop checking if they won
+            }
+        }
+    }
+
+    public void handleAdvancement(ServerPlayer player, AdvancementHolder advancement) {
+        if (!active || paused || isCountingDown || mode != GameMode.ADVANCEMENTS) return;
+
+        UUID uuid = player.getUUID();
+        PlayerEntry entry = players.get(uuid);
+        if (entry == null) return;
+
+        String advancementKey = advancement.id().toString();
+
+        if (claimedItems.contains(advancementKey)) {
+            return; // Already claimed
+        }
+
+        claimedItems.add(advancementKey);
+        entry.addClaim(advancementKey);
+
+        String advancementName = advancement.value().name().map(Component::getString).orElse(advancementKey);
+
+        broadcastToServer(player.level().getServer(),
+                Component.literal("🏆 " + entry.getName() + " earned: " + advancementName + "!").withStyle(style -> style.withColor(entry.getColor())));
+
+        LockoutNetworking.broadcastState(player.level().getServer(), goal, new ArrayList<>(players.values()), mode, paused, pausedPlayerName);
+
+        if (entry.getScore() >= goal) {
+            win(player, entry);
+        }
+    }
+
+    public void handleFood(ServerPlayer player, ItemStack food) {
+        if (!active || paused || isCountingDown || mode != GameMode.FOODS) return;
+
+        UUID uuid = player.getUUID();
+        PlayerEntry entry = players.get(uuid);
+        if (entry == null) return;
+
+        String foodName = food.getItem().toString();
+
+        if (claimedItems.contains(foodName)) {
+            return; // Already claimed
+        }
+
+        claimedItems.add(foodName);
+        entry.addClaim(foodName);
+
+        String displayName = food.getHoverName().getString();
+
+        broadcastToServer(player.level().getServer(),
+                Component.literal("🍖 " + entry.getName() + " ate: " + displayName + "!").withStyle(style -> style.withColor(entry.getColor())));
+
+        LockoutNetworking.broadcastState(player.level().getServer(), goal, new ArrayList<>(players.values()), mode, paused, pausedPlayerName);
+
+        if (entry.getScore() >= goal) {
+            win(player, entry);
+        }
+    }
+
+    private void preparePlayer(ServerPlayer player) {
+        player.getInventory().clearContent();
         player.setHealth(player.getMaxHealth());
         player.getFoodData().setFoodLevel(20);
         player.getFoodData().setSaturation(20.0f);
 
         var server = player.level().getServer();
 
-        // Teleport to custom spawn or world spawn
         if (customSpawnPos != null && customSpawnDimension != null) {
-            // Use custom spawn point
             ServerLevel targetLevel = server.getLevel(customSpawnDimension);
             if (targetLevel != null) {
-                player.teleportTo(
-                        customSpawnPos.x,
-                        customSpawnPos.y,
-                        customSpawnPos.z
-                );
+                player.teleportTo(customSpawnPos.x, customSpawnPos.y, customSpawnPos.z);
             } else {
-                // Fallback to overworld spawn if dimension doesn't exist
                 teleportToWorldSpawn(player, server);
             }
         } else {
-            // Default to world spawn
             teleportToWorldSpawn(player, server);
         }
 
-        // Set to survival
         player.setGameMode(GameType.SURVIVAL);
-
-        // clear effects
         player.getActiveEffects().clear();
-
-        // clear levels
         player.setExperiencePoints(0);
     }
 
     private void teleportToWorldSpawn(ServerPlayer player, MinecraftServer server) {
         ServerLevel overworld = server.getLevel(Level.OVERWORLD);
-        BlockPos spawnPos = overworld.getRespawnData().globalPos().pos();
-
-        player.teleportTo(
-                spawnPos.getX() + 0.5,
-                spawnPos.getY(),
-                spawnPos.getZ() + 0.5
-        );
+        BlockPos spawnPos = overworld.getLevel().getRespawnData().globalPos().pos();
+        player.teleportTo(spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5);
     }
 
     private void freezePlayer(ServerPlayer player) {
         player.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, Integer.MAX_VALUE, 255, false, false));
-        player.addEffect(new MobEffectInstance(MobEffects.JUMP_BOOST, Integer.MAX_VALUE, 255, false, false));
+        player.addEffect(new MobEffectInstance(MobEffects.JUMP_BOOST, Integer.MAX_VALUE, 250, false, false));
         player.addEffect(new MobEffectInstance(MobEffects.MINING_FATIGUE, Integer.MAX_VALUE, 255, false, false));
     }
 
@@ -250,12 +478,9 @@ public class LockoutGame {
     public void handlePause(MinecraftServer server) {
         if (!active || paused) return;
 
-        // Pause the game
         paused = true;
-
         broadcastToServer(server, Component.literal("⏸ Game paused").withStyle(style -> style.withColor(0xFFAA00).withBold(true)));
 
-        // Freeze all players
         for (UUID uuid : players.keySet()) {
             ServerPlayer player = server.getPlayerList().getPlayer(uuid);
             if (player != null) {
@@ -266,20 +491,14 @@ public class LockoutGame {
         LockoutNetworking.broadcastState(server, goal, new ArrayList<>(players.values()), mode, paused, pausedPlayerName);
     }
 
-    public void setMode(GameMode mode) {
-        this.mode = mode;
-    }
-
     public void handleUnpause(MinecraftServer server) {
         if (!active || !paused) return;
 
-        // Unpause the game
         paused = false;
         pausedPlayerName = "";
 
         broadcastToServer(server, Component.literal("▶ Game resumed!").withStyle(style -> style.withColor(0x55FF55).withBold(true)));
 
-        // Unfreeze all players
         for (UUID uuid : players.keySet()) {
             ServerPlayer player = server.getPlayerList().getPlayer(uuid);
             if (player != null) {
@@ -296,14 +515,12 @@ public class LockoutGame {
         UUID uuid = player.getUUID();
         if (!players.containsKey(uuid)) return;
 
-        // Pause the game
         paused = true;
         pausedPlayerName = player.getName().getString();
 
         MinecraftServer server = player.level().getServer();
         broadcastToServer(server, Component.literal("⏸ Game paused - waiting for " + pausedPlayerName + " to reconnect").withStyle(style -> style.withColor(0xFFAA00).withBold(true)));
 
-        // Freeze all other players
         for (UUID otherUuid : players.keySet()) {
             if (!otherUuid.equals(uuid)) {
                 ServerPlayer otherPlayer = server.getPlayerList().getPlayer(otherUuid);
@@ -323,14 +540,12 @@ public class LockoutGame {
         if (!players.containsKey(uuid)) return;
         if (!player.getName().getString().equals(pausedPlayerName)) return;
 
-        // Unpause the game
         paused = false;
         pausedPlayerName = "";
 
         MinecraftServer server = player.level().getServer();
         broadcastToServer(server, Component.literal("▶ Game resumed!").withStyle(style -> style.withColor(0x55FF55).withBold(true)));
 
-        // Unfreeze all players
         for (UUID otherUuid : players.keySet()) {
             ServerPlayer otherPlayer = server.getPlayerList().getPlayer(otherUuid);
             if (otherPlayer != null) {
@@ -357,7 +572,6 @@ public class LockoutGame {
     }
 
     public void stop(MinecraftServer server) {
-        // Unfreeze all players before stopping
         if (isCountingDown || paused) {
             for (UUID uuid : players.keySet()) {
                 ServerPlayer player = server.getPlayerList().getPlayer(uuid);
@@ -368,6 +582,11 @@ public class LockoutGame {
         }
 
         this.active = false;
+        this.paused = false;
+        this.pausedPlayerName = "";
+        this.isCountingDown = false;
+        this.countdownTicks = 0;
+        this.armorCheckTicks = 0;
         LockoutNetworking.broadcastState(server, goal, new ArrayList<>(players.values()), mode, paused, pausedPlayerName);
     }
 
@@ -380,7 +599,6 @@ public class LockoutGame {
 
         UUID uuid = player.getUUID();
         PlayerEntry entry = players.get(uuid);
-
         if (entry == null) return;
 
         String uniqueKey;
@@ -422,11 +640,6 @@ public class LockoutGame {
         }
     }
 
-    /**
-     * Check if a color is already taken by another player
-     * @param color The color to check
-     * @return The name of the player with that color, or null if no one has it
-     */
     public String getPlayerWithColor(int color) {
         for (PlayerEntry entry : players.values()) {
             if (entry.getColor() == color) {
@@ -441,7 +654,6 @@ public class LockoutGame {
 
         UUID uuid = player.getUUID();
         PlayerEntry entry = players.get(uuid);
-
         if (entry == null) return;
 
         String entityName = killed.getType().getDescription().getString();

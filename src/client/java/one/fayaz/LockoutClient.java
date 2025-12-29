@@ -6,7 +6,6 @@ import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -23,7 +22,6 @@ public class LockoutClient implements ClientModInitializer {
     private static String clientMode = "DEATH";
     private static boolean clientPaused = false;
     private static String clientPausedPlayerName = "";
-    private static boolean wasPaused = false; // Track previous pause state
 
     public static class PlayerData {
         public String name;
@@ -67,6 +65,7 @@ public class LockoutClient implements ClientModInitializer {
         if (client.font == null) return;
 
         int width = client.getWindow().getGuiScaledWidth();
+        int height = client.getWindow().getGuiScaledHeight();
         int centerX = width / 2;
         int topY = 15;
 
@@ -84,26 +83,29 @@ public class LockoutClient implements ClientModInitializer {
         int startX = centerX - (totalWidth / 2);
 
         // Draw goal text at the top with mode
-        String modeText = clientMode.equals("DEATH") ? "Deaths" : "Kills";
+        String modeText = switch (clientMode) {
+            case "DEATH" -> "Deaths";
+            case "KILLS" -> "Kills";
+            case "ARMOR" -> "Armor Sets";
+            case "ADVANCEMENTS" -> "Advancements";
+            case "FOODS" -> "Foods";
+            default -> clientMode;
+        };
         String goalText = modeText + " Goal: " + clientGoal;
         int textWidth = client.font.width(goalText);
         graphics.drawString(client.font, goalText, centerX - (textWidth / 2), topY - 12, 0xFFFFFF, true);
 
-        // Handle pause state with title overlay
+        // Draw pause message if paused
         if (clientPaused) {
-            // Just paused - show title
-            Component titleText = Component.literal("|| PAUSED").withStyle(style -> style.withColor(0xFFAA00).withBold(true));
-            Component subtitleText = Component.literal("Waiting for " + clientPausedPlayerName + " to reconnect").withStyle(style -> style.withColor(0xFFFFFF));
+            String pauseText = "⏸ PAUSED - Waiting for " + clientPausedPlayerName + " to reconnect";
+            int pauseWidth = client.font.width(pauseText);
+            int pauseY = height / 2 - 20;
 
-            client.gui.setTitle(titleText);
-            client.gui.setSubtitle(subtitleText);
-            client.gui.setTimes(0, 100000, 10); // Fade in: 0, stay: long time, fade out: 10
+            // Draw background
+            graphics.fill(centerX - pauseWidth / 2 - 5, pauseY - 3, centerX + pauseWidth / 2 + 5, pauseY + 12, 0xAA000000);
 
-            wasPaused = true;
-        } else if (!clientPaused) {
-            // Just unpaused - clear title
-            client.gui.clearTitles();
-            wasPaused = false;
+            // Draw text
+            graphics.drawString(client.font, pauseText, centerX - pauseWidth / 2, pauseY, 0xFFAA00, true);
         }
 
         // Draw each player's progress
@@ -143,7 +145,45 @@ public class LockoutClient implements ClientModInitializer {
     private ItemStack getIconForClaim(String claim) {
         String lower = claim.toLowerCase();
 
-        // For kills mode, try to match entity name directly first
+        // Armor mode - show chestplate
+        if (clientMode.equals("ARMOR")) {
+            if (lower.contains("leather")) return new ItemStack(Items.LEATHER_CHESTPLATE);
+            if (lower.contains("chainmail")) return new ItemStack(Items.CHAINMAIL_CHESTPLATE);
+            if (lower.contains("iron")) return new ItemStack(Items.IRON_CHESTPLATE);
+            if (lower.contains("gold")) return new ItemStack(Items.GOLDEN_CHESTPLATE);
+            if (lower.contains("diamond")) return new ItemStack(Items.DIAMOND_CHESTPLATE);
+            if (lower.contains("netherite")) return new ItemStack(Items.NETHERITE_CHESTPLATE);
+            return new ItemStack(Items.IRON_CHESTPLATE); // Fallback
+        }
+
+        // Advancements mode - show relevant icon
+        if (clientMode.equals("ADVANCEMENTS")) {
+            // Try to match common advancement keywords to items
+            if (lower.contains("stone")) return new ItemStack(Items.STONE);
+            if (lower.contains("iron")) return new ItemStack(Items.IRON_INGOT);
+            if (lower.contains("diamond")) return new ItemStack(Items.DIAMOND);
+            if (lower.contains("nether")) return new ItemStack(Items.NETHERRACK);
+            if (lower.contains("end")) return new ItemStack(Items.END_STONE);
+            if (lower.contains("elytra")) return new ItemStack(Items.ELYTRA);
+            if (lower.contains("enchant")) return new ItemStack(Items.ENCHANTING_TABLE);
+            if (lower.contains("breed")) return new ItemStack(Items.WHEAT);
+            if (lower.contains("fish")) return new ItemStack(Items.FISHING_ROD);
+            if (lower.contains("cake")) return new ItemStack(Items.CAKE);
+            return new ItemStack(Items.KNOWLEDGE_BOOK); // Default for advancements
+        }
+
+        // Foods mode - try to parse the item directly
+        if (clientMode.equals("FOODS")) {
+            // Try to find the item from registry
+            var item = BuiltInRegistries.ITEM.stream()
+                    .filter(i -> i.toString().equals(claim))
+                    .findFirst()
+                    .orElse(null);
+            if (item != null) return new ItemStack(item);
+            return new ItemStack(Items.APPLE); // Fallback
+        }
+
+        // Kills mode
         if (clientMode.equals("KILLS")) {
             for (EntityType<?> type : BuiltInRegistries.ENTITY_TYPE) {
                 String entityName = type.getDescription().getString();
@@ -154,7 +194,7 @@ public class LockoutClient implements ClientModInitializer {
             }
         }
 
-        // For death mode or fallback, check for keywords
+        // Death mode - check for keywords
         if (lower.contains("discovered")) return new ItemStack(Items.MAGMA_BLOCK);
         else if (lower.contains("lava")) return new ItemStack(Items.LAVA_BUCKET);
         else if (lower.contains("suffocated")) return new ItemStack(Items.SAND);
@@ -183,8 +223,14 @@ public class LockoutClient implements ClientModInitializer {
                 }
             }
 
-            // Fallback
-            return new ItemStack(clientMode.equals("KILLS") ? Items.IRON_SWORD : Items.PLAYER_HEAD);
+            // Fallback based on mode
+            return switch (clientMode) {
+                case "KILLS" -> new ItemStack(Items.IRON_SWORD);
+                case "ARMOR" -> new ItemStack(Items.IRON_CHESTPLATE);
+                case "ADVANCEMENTS" -> new ItemStack(Items.KNOWLEDGE_BOOK);
+                case "FOODS" -> new ItemStack(Items.APPLE);
+                default -> new ItemStack(Items.PLAYER_HEAD);
+            };
         }
     }
 }
