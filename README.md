@@ -95,7 +95,7 @@ Default is 5. No upper limit.
 
 **3. Add players:**
 ```
-/lockout player add <player> [color]
+/lockout player add <player> <color>
 ```
 
 **Color options:**
@@ -114,7 +114,7 @@ Examples:
 
 **4. (Optional) Set a custom spawn point:**
 ```
-/lockout spawnpoint [x y z]
+/lockout spawnpoint <x> <y> <z>
 /lockout spawnpoint
 ```
 
@@ -257,9 +257,7 @@ Shows:
 ## 📊 HUD Display
 
 During an active game, the HUD shows:
-- **Goal and mode** at the top center
 - Each player's **progress boxes** in their custom color
-- **Player names** below their boxes
 - **Icons** for each claimed objective:
   - Death mode: Shows the item/mob that killed them
   - Kills mode: Shows spawn eggs for killed mobs
@@ -275,7 +273,7 @@ When paused, a large title appears in the center showing which player is being w
 
 ⚠️ **Required on both client and server**
 
-All players must have the mod installed for Lockout to function correctly. The mod must be present on both the server and all clients.
+All players must have the mod installed for lockout to function correctly. The mod must be present on both the server and all clients.
 
 ---
 
@@ -283,60 +281,40 @@ All players must have the mod installed for Lockout to function correctly. The m
 
 ### Death Mode:
 - Think outside the box — environmental deaths matter
-- Race to claim common deaths early (zombies, falling, fire)
-- Force your opponents into risky situations 😈
+- Race to claim common deaths early (falling, fire)
+- Seek out caves if it's not night time!
 - Creative death combinations can secure victory
-- Use the SOURCE matching mode for more consistent death tracking
 
 ### Kills Mode:
 - Plan efficient mob hunting routes
-- Use spawn eggs or natural spawning strategically
+- Caves are once again your friend during the day!
 - Consider biomes where rare mobs spawn
 - Don't waste time on already-claimed mobs
-- Check the HUD to see what's been claimed
 
 ### Armor Mode:
-- **SET**: Focus on one material at a time - partial sets don't count
-- **PIECE**: Rush cheap materials (leather, gold) for easy early points
-- Mine strategically based on what materials are still available
-- In SET mode, carry backup pieces in case one breaks
-- In PIECE mode, wear your claimed armor to free inventory space
+- Don't just focus on one material at a time - you need to stop your opponents!
+- Rush cheap materials (leather, gold) for easy early points
+- In SET mode, aim for 27.
+- In PIECE mode, just make boots!
 
 ### Advancements Mode:
-- Prioritize quick, easy advancements early (wood, stone tools)
+- Prioritize quick, easy advancements early (stone/tools)
 - Plan advancement chains (some unlock others)
 - Check the advancement tree to see what's possible
-- Balance exploration vs progression advancements
-- Remember recipe advancements don't count
+- Or try to speedrun the game!
 
 ### Foods Mode:
-- Set up farms early for renewable food sources
+- No need for farms, you just need one!
 - Fishing can provide multiple unique foods quickly
 - Golden foods and suspicious stews count
-- Raid villages for bread and other prepared foods
-- Balance hunting, farming, and gathering
-
+- Villages are your best bet for crops
+- Remember to eat both raw and cooked meats!
+  
 ### General:
 - Watch what objectives others have claimed on the HUD
-- Communicate with teammates (or don't, if you're competing!)
 - The pause system means you don't lose progress if someone disconnects
-- Use the stop command to end a match early if needed
 - Different modes reward different playstyles - choose based on your strengths
 
 ---
-
-## 🎨 Features
-
-- ✅ Five game modes (Death, Kills, Armor, Advancements, Foods)
-- ✅ Configurable submodes for Death and Armor
-- ✅ Custom spawn points
-- ✅ 3-second countdown with player freeze
-- ✅ Auto-pause on player disconnect
-- ✅ Manual pause/unpause
-- ✅ Unique color requirement per player
-- ✅ Live HUD with progress tracking
-- ✅ Mode-specific icon display for claimed objectives
-- ✅ Separate stop vs reset commands
-- ✅ Supports 2-100 players
 
 Good luck, and may the best player win! 🏆
