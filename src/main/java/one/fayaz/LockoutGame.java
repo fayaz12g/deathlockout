@@ -384,7 +384,8 @@ public class LockoutGame {
         PlayerEntry entry = players.get(uuid);
         if (entry == null) return;
 
-        String advancementKey = advancement.id().toString();
+        String advancementKey = advancement.toString();
+        System.out.println("[Advancement String] " + advancement.toString());
 
         if (claimedItems.contains(advancementKey)) {
             return; // Already claimed

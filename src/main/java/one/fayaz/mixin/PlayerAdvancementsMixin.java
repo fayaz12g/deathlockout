@@ -1,6 +1,7 @@
 package one.fayaz.mixin;
 
 import net.minecraft.advancements.AdvancementHolder;
+import net.minecraft.advancements.AdvancementProgress;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.PlayerAdvancements;
 import one.fayaz.LockoutGame;
@@ -18,10 +19,15 @@ public class PlayerAdvancementsMixin {
 	@Inject(method = "award", at = @At("RETURN"))
 	private void onAdvancementAwarded(AdvancementHolder advancement, String criterionKey, CallbackInfoReturnable<Boolean> cir) {
 		if (cir.getReturnValue()) {
-			// Exclude recipe advancements (they have "recipes" in their path)
 			String advancementId = advancement.id().toString();
 			if (!advancementId.contains("recipes")) {
-				LockoutGame.INSTANCE.handleAdvancement(this.player, advancement);
+				// Check if the advancement is now fully completed
+				PlayerAdvancements advancements = (PlayerAdvancements) (Object) this;
+				AdvancementProgress progress = advancements.getOrStartProgress(advancement);
+
+				if (progress.isDone()) {
+					LockoutGame.INSTANCE.handleAdvancement(this.player, advancement);
+				}
 			}
 		}
 	}

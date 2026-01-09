@@ -19,7 +19,7 @@ loom {
 
 	runs {
 		client {
-			vmArg "-Ddevauth.enabled=false"
+			vmArg "-Ddevauth.enabled=true"
 			vmArg "-Ddevauth.account=main"
 		}
 
