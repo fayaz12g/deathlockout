@@ -254,9 +254,9 @@ public class LockoutClient implements ClientModInitializer {
         int slotsPerPlayer = Math.max(1, clientGoal - 1);
 
         // Victory box in the center
-        int victoryBoxSize = 24;
+        int victoryBoxSize = 28;
         int victoryBoxX = (screenWidth - victoryBoxSize) / 2;
-        int victoryBoxY = centerY;
+        int victoryBoxY = centerY - 5;
 
         // Render victory box
         renderSlotBackground(graphics, victoryBoxX, victoryBoxY, victoryBoxSize, 0x88000000, false);
