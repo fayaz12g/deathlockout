@@ -47,7 +47,8 @@ public class LockoutNetworking {
     }
 
     public static void registerCommon() {
-        PayloadTypeRegistry.playS2C().register(SYNC_TYPE, LockoutSyncPayload.CODEC);
+        PayloadTypeRegistry.clientboundPlay()
+                .register(SYNC_TYPE, LockoutSyncPayload.CODEC);
     }
 
     public static void sendToPlayer(ServerPlayer player, int goal, List<PlayerEntry> playerEntries, LockoutGame.GameMode mode, boolean paused, String pausedPlayerName) {
