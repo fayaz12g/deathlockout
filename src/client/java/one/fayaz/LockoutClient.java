@@ -118,6 +118,29 @@ public class LockoutClient implements ClientModInitializer {
             }
         });
 
+        // ---- System Message Listener ----
+        ClientPlayNetworking.registerGlobalReceiver(
+                Identifier.fromNamespaceAndPath("minecraft", "system_chat"),
+                (payload, context) -> context.client().execute(() -> {
+                    String message = payload.content().getString();
+                    if (message.startsWith("❌")) {
+                        Minecraft client = Minecraft.getInstance();
+                        if (client.player != null && client.level != null) {
+                            client.level.playLocalSound(
+                                    client.player.getX(),
+                                    client.player.getY(),
+                                    client.player.getZ(),
+                                    SoundEvents.VILLAGER_NO,
+                                    SoundSource.PLAYERS,
+                                    1.0F,
+                                    1.0F,
+                                    false
+                            );
+                        }
+                    }
+                })
+        );
+
         // ---- Keybind ----
         KeyMapping.Category LOCKOUT_CATEGORY =
                 KeyMapping.Category.register(
