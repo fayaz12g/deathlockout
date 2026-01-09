@@ -54,7 +54,7 @@ public class LockoutGame {
     private boolean isCountingDown = false;
     private int armorCheckTicks = 0; // For periodic armor checking
     private int goal = 5;
-    private GameMode mode = GameMode.DEATH;
+    private GameMode mode = GameMode.MIXED;
     private ArmorMode armorMode = ArmorMode.SET;
     private DeathMatchMode deathMatchMode = DeathMatchMode.SOURCE;
     private final Map<UUID, PlayerEntry> players = new LinkedHashMap<>();
