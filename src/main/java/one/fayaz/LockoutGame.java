@@ -116,7 +116,6 @@ public class LockoutGame {
         }
 
         players.put(uuid, new PlayerEntry(uuid, player.getName().getString(), color));
-        player.sendSystemMessage(Component.literal("✓ Added to lockout!").withStyle(style -> style.withColor(0x55FF55)));
         return true;
     }
 

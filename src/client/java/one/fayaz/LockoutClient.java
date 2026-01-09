@@ -9,6 +9,8 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.resources.Identifier;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.item.ItemStack;
 import org.lwjgl.glfw.GLFW;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
@@ -30,6 +32,11 @@ public class LockoutClient implements ClientModInitializer {
     // ================= KEYBIND =================
 
     private static KeyMapping OPEN_UI_KEY;
+
+    // ================= SOUND TRACKING =================
+
+    // Track previous claim counts to detect new goals
+    private final List<Integer> previousClaimCounts = new ArrayList<>();
 
     // ================= PLAYER DATA =================
 
@@ -70,10 +77,16 @@ public class LockoutClient implements ClientModInitializer {
                     clientPaused = payload.paused();
                     clientPausedPlayerName = payload.pausedPlayerName();
 
+                    // Store old player data for sound comparison
+                    List<PlayerData> oldPlayers = new ArrayList<>(clientPlayers);
+
                     clientPlayers.clear();
                     for (LockoutNetworking.PlayerData pd : payload.players()) {
                         clientPlayers.add(new PlayerData(pd.name(), pd.color(), pd.claims()));
                     }
+
+                    // Play sounds for new goals
+                    playSoundsForGoals(oldPlayers);
                 })
         );
 
@@ -104,6 +117,64 @@ public class LockoutClient implements ClientModInitializer {
                 client.setScreen(new LockoutScreen(clientPlayers, clientMode, clientGoal));
             }
         });
+    }
+
+    // ================= SOUND EFFECTS =================
+
+    private void playSoundsForGoals(List<PlayerData> oldPlayers) {
+        Minecraft client = Minecraft.getInstance();
+        if (client.player == null || client.level == null) return;
+
+        String localPlayerName = client.player.getName().getString();
+
+        // Compare old and new player data
+        for (int i = 0; i < clientPlayers.size(); i++) {
+            PlayerData newPlayer = clientPlayers.get(i);
+
+            // Find matching player in old data
+            PlayerData oldPlayer = null;
+            for (PlayerData old : oldPlayers) {
+                if (old.name.equals(newPlayer.name)) {
+                    oldPlayer = old;
+                    break;
+                }
+            }
+
+            // Check if this player got a new goal
+            int oldClaimCount = (oldPlayer != null) ? oldPlayer.claims.size() : 0;
+            int newClaimCount = newPlayer.claims.size();
+
+            if (newClaimCount > oldClaimCount) {
+                // This player got a new goal!
+                boolean isLocalPlayer = newPlayer.name.equals(localPlayerName);
+
+                if (isLocalPlayer) {
+                    // Play positive sound for local player
+                    client.level.playLocalSound(
+                            client.player.getX(),
+                            client.player.getY(),
+                            client.player.getZ(),
+                            SoundEvents.PLAYER_LEVELUP,
+                            SoundSource.PLAYERS,
+                            0.5F,
+                            1.0F,
+                            false
+                    );
+                } else {
+                    // Play negative sound for opponent
+                    client.level.playLocalSound(
+                            client.player.getX(),
+                            client.player.getY(),
+                            client.player.getZ(),
+                            SoundEvents.VILLAGER_NO,
+                            SoundSource.PLAYERS,
+                            0.5F,
+                            1.0F,
+                            false
+                    );
+                }
+            }
+        }
     }
 
     // ================= HUD RENDER =================
