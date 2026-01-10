@@ -60,7 +60,7 @@ public class Lockout implements ModInitializer {
 
     @Override
     public void onInitialize() {
-        LOGGER.info("Initializing Fayaz's Lockout for 1.21.11");
+        LOGGER.info("Initializing Fayaz's Lockout for 26.1");
 
         // 1. Register Networking
         LockoutNetworking.registerCommon();
