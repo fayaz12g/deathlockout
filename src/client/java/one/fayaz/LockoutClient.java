@@ -18,6 +18,7 @@ import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 public class LockoutClient implements ClientModInitializer {
 
@@ -339,34 +340,38 @@ public class LockoutClient implements ClientModInitializer {
                     graphics.renderItem(player.icons.get(slotIndex), x + 1, y + 1);
                     LockoutNetworking.ClaimData claim = player.claims.get(slotIndex);
 
-                    // Use blit() instead of blitSprite() for direct PNG textures
-                    Identifier overlay = switch (claim.type()) {
-                        case KILL -> Identifier.fromNamespaceAndPath("lockout", "textures/gui/sword.png");
-                        case DEATH -> Identifier.fromNamespaceAndPath("lockout", "textures/gui/skull.png");
-                        case ADVANCEMENT -> Identifier.fromNamespaceAndPath("lockout", "textures/gui/recipe_book.png");
-                        case FOOD -> Identifier.fromNamespaceAndPath("lockout", "textures/gui/food.png");
-                        case ARMOR -> Identifier.fromNamespaceAndPath("lockout", "textures/gui/armor.png");
-                        case BREED -> Identifier.fromNamespaceAndPath("lockout", "textures/gui/heart.png");
-                    };
+                    if (clientMode.equals("MIXED")) {
+                        // Define overlay
+                        Identifier overlay = switch (claim.type()) {
+                            case KILL -> Identifier.fromNamespaceAndPath("lockout", "textures/gui/sword.png");
+                            case DEATH -> Identifier.fromNamespaceAndPath("lockout", "textures/gui/skull.png");
+                            case ADVANCEMENT ->
+                                    Identifier.fromNamespaceAndPath("lockout", "textures/gui/recipe_book.png");
+                            case FOOD -> Identifier.fromNamespaceAndPath("lockout", "textures/gui/food.png");
+                            case ARMOR -> Identifier.fromNamespaceAndPath("lockout", "textures/gui/armor.png");
+                            case BREED -> Identifier.fromNamespaceAndPath("lockout", "textures/gui/heart.png");
+                        };
 
-                    // Scale and render the 16x16 texture as 8x8 in the corner
-                    graphics.pose().pushMatrix();
-                    graphics.pose().translate(x + slotSize - 8, y + slotSize - 8);
-                    graphics.pose().scale(0.5F, 0.5F);  // Scale down to 50% (16x16 -> 8x8)
-                    graphics.blit(
-                            RenderPipelines.GUI_TEXTURED,
-                            overlay,
-                            0,
-                            0,
-                            0,    // u (texture x)
-                            0,    // v (texture y)
-                            16,   // width on screen (will be scaled to 8)
-                            16,   // height on screen (will be scaled to 8)
-                            16,   // texture width
-                            16    // texture height
-                    );
-                    graphics.pose().popMatrix();
+                        // Scale and render the 16x16 texture as 8x8 in the corner
+                        graphics.pose().pushMatrix();
+                        graphics.pose().translate(x + slotSize - 8, y + slotSize - 8);
+                        graphics.pose().scale(0.5F, 0.5F);  // Scale down to 50% (16x16 -> 8x8)
+                        graphics.blit(
+                                RenderPipelines.GUI_TEXTURED,
+                                overlay,
+                                0,
+                                0,
+                                0,    // u (texture x)
+                                0,    // v (texture y)
+                                16,   // width on screen (will be scaled to 8)
+                                16,   // height on screen (will be scaled to 8)
+                                16,   // texture width
+                                16    // texture height
+                        );
+                        graphics.pose().popMatrix();
+                    }
                 }
+
             }
         }
 
