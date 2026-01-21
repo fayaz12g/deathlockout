@@ -259,6 +259,18 @@ public class Lockout implements ModInitializer {
                                         return 1;
                                     })
                             )
+                            .then(Commands.literal("breed")
+                                    .executes(ctx -> {
+                                        LockoutGame.INSTANCE.setMode(LockoutGame.GameMode.BREED);
+                                        Component msg = Component.literal("✓ Mode set to: BREED").withStyle(style -> style.withColor(0x55FF55));
+
+                                        ctx.getSource()
+                                                .getServer()
+                                                .getPlayerList()
+                                                .broadcastSystemMessage(msg, false);
+                                        return 1;
+                                    })
+                            )
                             .then(Commands.literal("mixed")
                                     .executes(ctx -> {
                                         LockoutGame.INSTANCE.setMode(LockoutGame.GameMode.MIXED);

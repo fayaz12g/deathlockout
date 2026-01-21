@@ -4,6 +4,7 @@ import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -14,6 +15,7 @@ import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Relative;
+import net.minecraft.world.entity.animal.Animal;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
@@ -511,17 +513,35 @@ public class LockoutGame {
         }
     }
 
-
-    public void handleBreed(ServerPlayer player) {
-        if (!active || paused || isCountingDown || (mode != GameMode.BREED) && mode != GameMode.MIXED) return;
+    public void handleBreed(ServerPlayer player, Animal animal) {
+        if (!active || paused || isCountingDown || (mode != GameMode.BREED && mode != GameMode.MIXED)) return;
 
         UUID uuid = player.getUUID();
         PlayerEntry entry = players.get(uuid);
+        if (entry == null) return;
+
+        // Get the entity type identifier
+        Identifier entityTypeId = BuiltInRegistries.ENTITY_TYPE.getKey(animal.getType());
+        String animalKey = entityTypeId.toString();
+
+        if (claimedItems.contains(animalKey)) {
+            player.sendSystemMessage(Component.literal("❌ Someone's already bred that one!").withStyle(style -> style.withColor(0xFF5555)));
+            return;
+        }
+
+        claimedItems.add(animalKey);
+        entry.addClaim(animalKey, GoalType.BREED);
+        
+        String animalName = Component.translatable(animal.getType().getDescriptionId()).getString();
+
+        broadcastToServer(player.level().getServer(),
+                Component.literal("❤ " + entry.getName() + " bred " + animalName.toLowerCase() + "s!").withStyle(style -> style.withColor(entry.getColor())));
+
         LockoutNetworking.broadcastState(player.level().getServer(), goal, new ArrayList<>(players.values()), mode, paused, pausedPlayerName);
+
         if (entry.getScore() >= goal) {
             win(player, entry);
-        }
-        else {
+        } else {
             handleSwitch(player);
         }
     }
@@ -534,11 +554,10 @@ public class LockoutGame {
         if (entry == null) return;
 
         String advancementKey = advancement.toString();
-        System.out.println("[Advancement String] " + advancement.toString());
 
         if (claimedItems.contains(advancementKey)) {
             player.sendSystemMessage(Component.literal("❌ Someone's already claimed that one!").withStyle(style -> style.withColor(0xFF5555)));
-            return; // Already claimed
+            return;
         }
 
         claimedItems.add(advancementKey);

@@ -28,8 +28,8 @@ public class ItemStackFinder {
             if (item != null) return new ItemStack(item);
         }
 
-        // Kills mode
-        if (goalType==GoalType.KILL) {
+        // Kills and Breed modes
+        if (goalType==GoalType.KILL || goalType==GoalType.BREED) {
             for (EntityType<?> type : BuiltInRegistries.ENTITY_TYPE) {
                 String entityName = type.getDescription().getString();
                 if (entityName.equalsIgnoreCase(claim)) {
