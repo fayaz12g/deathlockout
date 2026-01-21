@@ -33,6 +33,7 @@ public class LockoutGame {
         ARMOR,
         ADVANCEMENTS,
         FOODS,
+        BREED,
         MIXED
     }
 
@@ -194,6 +195,7 @@ public class LockoutGame {
             case ARMOR -> "Armor Sets";
             case ADVANCEMENTS -> "Advancements";
             case FOODS -> "Foods";
+            case BREED -> "Breed";
             case MIXED -> "Mixed";
         };
 
@@ -437,7 +439,7 @@ public class LockoutGame {
 
         // Claim the armor set
         claimedItems.add(materialName);
-        entry.addClaim(materialName);
+        entry.addClaim(materialName, GoalType.ARMOR);
 
         broadcastToServer(
                 player.level().getServer(),
@@ -485,7 +487,7 @@ public class LockoutGame {
 
             // Claim this armor material
             claimedItems.add(materialName);
-            entry.addClaim(materialName);
+            entry.addClaim(materialName, GoalType.ARMOR);
 
             broadcastToServer(
                     player.level().getServer(),
@@ -509,6 +511,21 @@ public class LockoutGame {
         }
     }
 
+
+    public void handleBreed(ServerPlayer player) {
+        if (!active || paused || isCountingDown || (mode != GameMode.BREED) && mode != GameMode.MIXED) return;
+
+        UUID uuid = player.getUUID();
+        PlayerEntry entry = players.get(uuid);
+        LockoutNetworking.broadcastState(player.level().getServer(), goal, new ArrayList<>(players.values()), mode, paused, pausedPlayerName);
+        if (entry.getScore() >= goal) {
+            win(player, entry);
+        }
+        else {
+            handleSwitch(player);
+        }
+    }
+
     public void handleAdvancement(ServerPlayer player, AdvancementHolder advancement) {
         if (!active || paused || isCountingDown || (mode != GameMode.ADVANCEMENTS) && mode != GameMode.MIXED) return;
 
@@ -525,7 +542,7 @@ public class LockoutGame {
         }
 
         claimedItems.add(advancementKey);
-        entry.addClaim(advancementKey);
+        entry.addClaim(advancementKey, GoalType.ADVANCEMENT);
 
         String advancementName = advancement.value().name().map(Component::getString).orElse(advancementKey);
 
@@ -556,7 +573,7 @@ public class LockoutGame {
         }
 
         claimedItems.add(foodName);
-        entry.addClaim(foodName);
+        entry.addClaim(foodName, GoalType.FOOD);
 
         String displayName = food.getHoverName().getString();
 
@@ -775,7 +792,7 @@ public class LockoutGame {
         }
 
         claimedItems.add(uniqueKey);
-        entry.addClaim(uniqueKey);
+        entry.addClaim(uniqueKey, GoalType.DEATH);
 
         Component deathMessage = source.getLocalizedDeathMessage(player);
         broadcastToServer(player.level().getServer(),
@@ -816,7 +833,7 @@ public class LockoutGame {
         }
 
         claimedItems.add(entityName);
-        entry.addClaim(entityName);
+        entry.addClaim(entityName, GoalType.KILL);
 
         broadcastToServer(player.level().getServer(),
                 Component.literal("⚔ " + entry.getName() + " killed a " + entityName + "!").withStyle(style -> style.withColor(entry.getColor())));

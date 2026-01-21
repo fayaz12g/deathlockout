@@ -15,19 +15,11 @@ import static one.fayaz.LockoutClient.clientMode;
 
 public class ItemStackFinder {
 
-    public static ItemStack getIconForClaim(String claim) {
+    public static ItemStack getIconForClaim(String claim, GoalType goalType) {
         String lower = claim.toLowerCase();
 
-        String mode = clientMode;
-
-        if(mode.equals("MIXED")) {
-            if (lower.contains("minecraft:end/") || lower.contains("minecraft:adventure/") || lower.contains("minecraft:husbandry/") ||  lower.contains("minecraft:story/") || lower.contains("minecraft:nether/")) {
-                mode = "ADVANCEMENTS";
-            }
-        }
-
         // Foods mode - try to parse the item directly
-        if (mode.equals("FOODS") || mode.equals("MIXED")) {
+        if (goalType==GoalType.FOOD) {
             // Try to find the item from registry
             var item = BuiltInRegistries.ITEM.stream()
                     .filter(i -> i.toString().equals(claim))
@@ -37,7 +29,7 @@ public class ItemStackFinder {
         }
 
         // Kills mode
-        if (mode.equals("KILLS") || mode.equals("MIXED")) {
+        if (goalType==GoalType.KILL) {
             for (EntityType<?> type : BuiltInRegistries.ENTITY_TYPE) {
                 String entityName = type.getDescription().getString();
                 if (entityName.equalsIgnoreCase(claim)) {
@@ -55,17 +47,17 @@ public class ItemStackFinder {
         }
 
         // Death mode - check for keywords
-        if (mode.equals("DEATH") || mode.equals("MIXED")) {
+        if (goalType==GoalType.DEATH) {
             return DeathIconRegistry.get(lower);
         }
 
         // Armor mode - show chestplate
-        if (mode.equals("ARMOR")) {
+        if (goalType==GoalType.ARMOR) {
             return one.fayaz.client.ArmorIconRegistry.get(lower);
         }
 
         // Advancements mode - show relevant icon
-        if (mode.equals("ADVANCEMENTS")) {
+        if (goalType==GoalType.ADVANCEMENT) {
             Identifier id = Identifier.tryParse(claim);
             return AdvancementIconRegistry.get(id);
         }

@@ -116,7 +116,9 @@ public class LockoutScreen extends Screen {
         if (index >= player.claims.size()) return;
 
         ItemStack stack = player.icons.get(index);
-        String claimText = player.claims.get(index);
+        LockoutNetworking.ClaimData claim = player.claims.get(index);
+        String claimText = claim.id();
+
 
         // Get the item's tooltip lines and add our custom claim text
         List<Component> tooltip = stack.getTooltipLines(
