@@ -13,12 +13,11 @@ import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.item.Item;
+import net.minecraft.world.entity.Relative;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.equipment.ArmorMaterial;
-import net.minecraft.world.item.equipment.ArmorType;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.storage.LevelData;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.*;
@@ -57,6 +56,7 @@ public class LockoutGame {
     private GameMode mode = GameMode.MIXED;
     private ArmorMode armorMode = ArmorMode.SET;
     private DeathMatchMode deathMatchMode = DeathMatchMode.SOURCE;
+    private static boolean doSwitch = false;
     private final Map<UUID, PlayerEntry> players = new LinkedHashMap<>();
     private final Set<String> claimedItems = new HashSet<>();
 
@@ -77,6 +77,10 @@ public class LockoutGame {
 
     public void setMode(GameMode mode) {
         this.mode = mode;
+    }
+
+    public void setDoSwitch(boolean doSwitch) {
+        this.doSwitch = doSwitch;
     }
 
     public void setArmorMode(ArmorMode armorMode) {
@@ -197,6 +201,125 @@ public class LockoutGame {
         LockoutNetworking.broadcastState(server, goal, new ArrayList<>(players.values()), mode, paused, pausedPlayerName);
     }
 
+    public static void handleSwitch(ServerPlayer trigger) {
+        if (!doSwitch) return;
+
+        MinecraftServer server = trigger.level().getServer();
+        if (server == null) return;
+
+        // Collect Lockout players in order
+        List<ServerPlayer> players = new ArrayList<>();
+        for (UUID uuid : LockoutGame.INSTANCE.getPlayers().keySet()) {
+            ServerPlayer p = server.getPlayerList().getPlayer(uuid);
+            if (p != null) {
+                players.add(p);
+            }
+        }
+
+        int count = players.size();
+        if (count < 2) return;
+
+        // === SNAPSHOT ALL PLAYERS ===
+        List<PlayerSnapshot> snapshots = new ArrayList<>();
+
+        for (ServerPlayer p : players) {
+            PlayerSnapshot s = new PlayerSnapshot();
+
+            s.level = p.level();
+            s.pos = p.position();
+            s.yaw = p.getYRot();
+            s.pitch = p.getXRot();
+
+            s.inventory = new ArrayList<>();
+            for (int i = 0; i < p.getInventory().getContainerSize(); i++) {
+                s.inventory.add(p.getInventory().getItem(i).copy());
+            }
+
+            s.effects = new ArrayList<>();
+            for (MobEffectInstance effect : p.getActiveEffects()) {
+                s.effects.add(new MobEffectInstance(effect));
+            }
+
+            s.xpLevel = p.experienceLevel;
+            s.xpProgress = p.experienceProgress;
+            s.xpTotal = p.totalExperience;
+
+            s.health = p.getHealth();
+
+            s.food = p.getFoodData().getFoodLevel();
+            s.saturation = p.getFoodData().getSaturationLevel();
+
+            var respawn = p.getRespawnConfig().respawnData();
+
+            s.respawnPos = respawn.pos();
+            s.respawnDim = respawn.dimension();
+            s.respawnYaw = respawn.yaw();
+            s.respawnPitch = respawn.pitch();
+            s.respawnForced = p.getRespawnConfig().forced();
+
+            snapshots.add(s);
+        }
+
+        // === APPLY ROTATION (i inherits i+1, last inherits 0) ===
+        for (int i = 0; i < count; i++) {
+            ServerPlayer target = players.get(i);
+            PlayerSnapshot from = snapshots.get((i + 1) % count);
+
+            // Teleport
+            ServerLevel targetLevel = (ServerLevel) from.level;
+
+            target.teleportTo(
+                    targetLevel,
+                    from.pos.x,
+                    from.pos.y,
+                    from.pos.z,
+                    EnumSet.noneOf(Relative.class),
+                    from.yaw,
+                    from.pitch,
+                    true
+            );
+
+            // Inventory
+            target.getInventory().clearContent();
+            for (int slot = 0; slot < from.inventory.size(); slot++) {
+                target.getInventory().setItem(slot, from.inventory.get(slot));
+            }
+            target.getInventory().setChanged();
+
+            // XP
+            target.setExperienceLevels(from.xpLevel);
+            target.experienceProgress = from.xpProgress;
+            target.totalExperience = from.xpTotal;
+
+            // Health
+            target.setHealth(from.health);
+
+            // Effects
+            target.removeAllEffects();
+            for (MobEffectInstance effect : from.effects) {
+                target.addEffect(new MobEffectInstance(effect));
+            }
+
+            // Food
+            target.getFoodData().setFoodLevel(from.food);
+            target.getFoodData().setSaturation(from.saturation);
+
+            // Respawn
+            target.setRespawnPosition(
+                    new ServerPlayer.RespawnConfig(
+                            LevelData.RespawnData.of(
+                                    from.respawnDim,
+                                    from.respawnPos,
+                                    from.respawnYaw,
+                                    from.respawnPitch
+                            ),
+                            from.respawnForced
+                    ),
+                    false
+            );
+        }
+    }
+
     public void tick(MinecraftServer server) {
         // Handle countdown
         if (isCountingDown) {
@@ -258,12 +381,12 @@ public class LockoutGame {
         String id = BuiltInRegistries.ITEM.getKey(stack.getItem()).getPath();
 
         if (id.contains("netherite")) return "Netherite";
-        if (id.contains("diamond"))   return "Diamond";
-        if (id.contains("gold"))      return "Gold";
-        if (id.contains("iron"))      return "Iron";
-        if (id.contains("chainmail")) return "Chainmail";
-        if (id.contains("leather"))   return "Leather";
-
+        else if (id.contains("diamond"))   return "Diamond";
+        else if (id.contains("gold"))      return "Gold";
+        else if (id.contains("copper"))      return "Copper";
+        else if (id.contains("iron"))      return "Iron";
+        else if (id.contains("chainmail")) return "Chainmail";
+        else if (id.contains("leather"))   return "Leather";
         return "Unknown";
     }
 
@@ -333,6 +456,9 @@ public class LockoutGame {
 
         if (entry.getScore() >= goal) {
             win(player, entry);
+        }
+        else {
+            handleSwitch(player);
         }
     }
 
@@ -411,6 +537,9 @@ public class LockoutGame {
         if (entry.getScore() >= goal) {
             win(player, entry);
         }
+        else {
+            handleSwitch(player);
+        }
     }
 
     public void handleFood(ServerPlayer player, ItemStack food) {
@@ -438,6 +567,9 @@ public class LockoutGame {
 
         if (entry.getScore() >= goal) {
             win(player, entry);
+        }
+        else {
+            handleSwitch(player);
         }
     }
 
@@ -655,6 +787,9 @@ public class LockoutGame {
         if (entry.getScore() >= goal) {
             win(player, entry);
         }
+        else {
+            handleSwitch(player);
+        }
     }
 
     public String getPlayerWithColor(int color) {
@@ -690,6 +825,9 @@ public class LockoutGame {
 
         if (entry.getScore() >= goal) {
             win(player, entry);
+        }
+        else {
+            handleSwitch(player);
         }
     }
 

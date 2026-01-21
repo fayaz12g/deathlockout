@@ -1,11 +1,15 @@
 package one.fayaz;
 
+import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.SpawnEggItem;
+
+import java.util.Optional;
 
 import static one.fayaz.LockoutClient.clientMode;
 
@@ -17,7 +21,7 @@ public class ItemStackFinder {
         String mode = clientMode;
 
         if(mode.equals("MIXED")) {
-            if (lower.contains("minecraft:")) {
+            if (lower.contains("minecraft:end/") || lower.contains("minecraft:adventure/") || lower.contains("minecraft:husbandry/") ||  lower.contains("minecraft:story/") || lower.contains("minecraft:nether/")) {
                 mode = "ADVANCEMENTS";
             }
         }
@@ -37,8 +41,15 @@ public class ItemStackFinder {
             for (EntityType<?> type : BuiltInRegistries.ENTITY_TYPE) {
                 String entityName = type.getDescription().getString();
                 if (entityName.equalsIgnoreCase(claim)) {
-                    SpawnEggItem egg = SpawnEggItem.byId(type);
-                    if (egg != null) return new ItemStack(egg);
+
+                    Optional<Holder<Item>> eggHolderOpt = SpawnEggItem.byId(type);
+                    if (eggHolderOpt.isPresent()) {
+                        Item item = eggHolderOpt.get().value();
+                        if (item instanceof SpawnEggItem) {
+                            return new ItemStack(item);
+                        }
+                    }
+
                 }
             }
         }

@@ -334,7 +334,7 @@ public class LockoutClient implements ClientModInitializer {
                 ItemStack winningIcon = player.icons.get(player.icons.size() - 1);
 
                 // Add winning player's color glow
-                int winTint = (player.color & 0xFFFFFF) | 0xFFFFFF;
+                int winTint = (player.color & 0xFFFFFF) | 0x88000000;
                 graphics.fill(
                         victoryBoxX + 1,
                         victoryBoxY + 1,

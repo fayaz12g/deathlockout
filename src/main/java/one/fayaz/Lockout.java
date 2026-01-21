@@ -1,7 +1,9 @@
 package one.fayaz;
 
+import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
+import com.sun.jdi.connect.Connector;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
@@ -33,9 +35,7 @@ import java.util.stream.Collectors;
 public class Lockout implements ModInitializer {
     public static final String MOD_ID = "lockout";
     public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
-    private static final Set<Item> FOOD_ITEMS = BuiltInRegistries.ITEM.stream()
-            .filter(item -> item.components().has(DataComponents.FOOD))
-            .collect(Collectors.toSet());
+    private static Set<Item> FOOD_ITEMS;
     private static final Map<String, Integer> NAMED_COLORS = new HashMap<>();
     static {
         NAMED_COLORS.put("red", 0xFF5555);
@@ -97,6 +97,12 @@ public class Lockout implements ModInitializer {
         });
 
         // 8. Food tracking
+        ServerLifecycleEvents.SERVER_STARTING.register(server -> {
+            FOOD_ITEMS = BuiltInRegistries.ITEM.stream()
+                    .filter(item -> item.components().has(DataComponents.FOOD))
+                    .collect(Collectors.toSet());
+        });
+
         net.fabricmc.fabric.api.event.player.UseItemCallback.EVENT.register((player, world, hand) -> {
             if (player instanceof ServerPlayer serverPlayer) {
                 ItemStack stack = serverPlayer.getItemInHand(hand);
@@ -146,6 +152,23 @@ public class Lockout implements ModInitializer {
                                         LockoutGame.INSTANCE.setGoal(goal);
 
                                         Component msg = Component.literal("✓ Goal set to: " + goal).withStyle(style -> style.withColor(0x55FF55));
+                                        ctx.getSource()
+                                                .getServer()
+                                                .getPlayerList()
+                                                .broadcastSystemMessage(msg, false);
+
+                                        return 1;
+                                    })
+                            )
+                    )
+                    // /lockout switch <bool>
+                    .then(Commands.literal("switch")
+                            .then(Commands.argument("boolean", BoolArgumentType.bool())
+                                    .executes(ctx -> {
+                                        boolean doSwitch = BoolArgumentType.getBool(ctx, "boolean");
+                                        LockoutGame.INSTANCE.setDoSwitch(doSwitch);
+
+                                        Component msg = Component.literal("✓ Switching mode set to: " + doSwitch).withStyle(style -> style.withColor(0x55FF55));
                                         ctx.getSource()
                                                 .getServer()
                                                 .getPlayerList()
