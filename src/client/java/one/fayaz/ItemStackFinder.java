@@ -51,7 +51,7 @@ public class ItemStackFinder {
             return DeathIconRegistry.get(lower);
         }
 
-        // Armor mode - show chestplate
+        // Armor mode - show turtle helmet or chestplate
         if (goalType==GoalType.ARMOR) {
             return one.fayaz.client.ArmorIconRegistry.get(lower);
         }

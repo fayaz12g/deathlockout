@@ -4,7 +4,8 @@
 	"compatibilityLevel": "JAVA_21",
 	"mixins": [
 		"PlayerAdvancementsMixin",
-		"PlayerBreedMixin"
+		"PlayerBreedMixin",
+		"PlayerArmorMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

@@ -95,7 +95,7 @@ public class Lockout implements ModInitializer {
         ServerTickEvents.END_SERVER_TICK.register(server -> {
             LockoutGame.INSTANCE.tick(server);
         });
-
+        
         // 8. Food tracking
         ServerLifecycleEvents.SERVER_STARTING.register(server -> {
             FOOD_ITEMS = BuiltInRegistries.ITEM.stream()
