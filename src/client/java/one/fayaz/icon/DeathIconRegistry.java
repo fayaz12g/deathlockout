@@ -1,4 +1,4 @@
-package one.fayaz;
+package one.fayaz.icon;
 
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.EntityType;

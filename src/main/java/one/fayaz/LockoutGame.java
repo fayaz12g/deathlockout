@@ -146,13 +146,13 @@ public class LockoutGame {
 
     public boolean addPlayer(ServerPlayer player, int color) {
         if (active) {
-            player.sendSystemMessage(Component.literal("❌ Cannot add players while game is active!").withStyle(style -> style.withColor(0xFF5555)));
+            player.sendSystemMessage(Component.literal("❌ Cannot add player(s) while game is active!").withStyle(style -> style.withColor(0xFF5555)));
             return false;
         }
 
         UUID uuid = player.getUUID();
         if (players.containsKey(uuid)) {
-            player.sendSystemMessage(Component.literal("❌ Player already added!").withStyle(style -> style.withColor(0xFF5555)));
+            player.sendSystemMessage(Component.literal("❌ Player(s) already added!").withStyle(style -> style.withColor(0xFF5555)));
             return false;
         }
 
@@ -407,23 +407,6 @@ public class LockoutGame {
             }
             return;
         }
-        // Check armor every 20 ticks (1 second) if in armor mode
-        if (active && !paused && (mode == GameMode.ARMOR || (mode == GameMode.MIXED && mixedModes.contains(GameMode.ARMOR)))) {
-            armorCheckTicks++;
-            if (armorCheckTicks >= 20) {
-                armorCheckTicks = 0;
-                checkAllPlayersArmor(server);
-            }
-        }
-    }
-
-    private void checkAllPlayersArmor(MinecraftServer server) {
-        for (UUID uuid : players.keySet()) {
-            ServerPlayer player = server.getPlayerList().getPlayer(uuid);
-            if (player != null) {
-                checkPlayerArmor(player);
-            }
-        }
     }
 
     public static boolean isArmorPiece(ItemStack stack, EquipmentSlot slot) {
@@ -450,10 +433,17 @@ public class LockoutGame {
         else if (id.contains("iron"))      return "Iron";
         else if (id.contains("chainmail")) return "Chainmail";
         else if (id.contains("leather"))   return "Leather";
+        else if (id.contains("turtle"))   return "Turtle";
         return "Unknown";
     }
 
-    public void checkPlayerArmor(ServerPlayer player) {
+    public void handleArmor(ServerPlayer player) {
+        if (!active || paused || isCountingDown ||
+                (mode != GameMode.ARMOR && mode != GameMode.MIXED) ||
+                (mode == GameMode.MIXED && !mixedModes.contains(GameMode.ARMOR))) {
+            return;
+        }
+
         UUID uuid = player.getUUID();
         PlayerEntry entry = players.get(uuid);
         if (entry == null) return;
@@ -471,26 +461,28 @@ public class LockoutGame {
     }
 
     private void checkArmorSet(ServerPlayer player, PlayerEntry entry, ItemStack helmet, ItemStack chestplate, ItemStack leggings, ItemStack boots) {
-        // All slots must be filled
-        if (helmet.isEmpty() || chestplate.isEmpty() || leggings.isEmpty() || boots.isEmpty()) {
-            return;
-        }
-
-        // Ensure all armor slots contain armor
-        if (!isArmorPiece(helmet, EquipmentSlot.HEAD) ||
-                !isArmorPiece(chestplate, EquipmentSlot.CHEST) ||
-                !isArmorPiece(leggings, EquipmentSlot.LEGS) ||
-                !isArmorPiece(boots, EquipmentSlot.FEET)) {
-            return;
-        }
-
         String materialName = getArmorMaterialName(helmet);
 
-        // Check that all pieces match
-        if (!materialName.equals(getArmorMaterialName(chestplate)) ||
-                !materialName.equals(getArmorMaterialName(leggings)) ||
-                !materialName.equals(getArmorMaterialName(boots))) {
-            return;
+        if (materialName != "Turtle") {
+            // All slots must be filled
+            if (helmet.isEmpty() || chestplate.isEmpty() || leggings.isEmpty() || boots.isEmpty()) {
+                return;
+            }
+
+            // Ensure all armor slots contain armor
+            if (!isArmorPiece(helmet, EquipmentSlot.HEAD) ||
+                    !isArmorPiece(chestplate, EquipmentSlot.CHEST) ||
+                    !isArmorPiece(leggings, EquipmentSlot.LEGS) ||
+                    !isArmorPiece(boots, EquipmentSlot.FEET)) {
+                return;
+            }
+
+            // Check that all pieces match
+            if (!materialName.equals(getArmorMaterialName(chestplate)) ||
+                    !materialName.equals(getArmorMaterialName(leggings)) ||
+                    !materialName.equals(getArmorMaterialName(boots))) {
+                return;
+            }
         }
 
         // Already claimed

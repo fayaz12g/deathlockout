@@ -1,4 +1,4 @@
-package one.fayaz.client;
+package one.fayaz.icon;
 
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -19,6 +19,7 @@ public final class ArmorIconRegistry {
         ARMOR.put("chainmail", new ItemStack(Items.CHAINMAIL_CHESTPLATE));
         ARMOR.put("copper", new ItemStack(Items.COPPER_CHESTPLATE));
         ARMOR.put("leather", new ItemStack(Items.LEATHER_CHESTPLATE));
+        ARMOR.put("turtle", new ItemStack(Items.TURTLE_HELMET));
     }
 
     public static ItemStack get(String text) {
