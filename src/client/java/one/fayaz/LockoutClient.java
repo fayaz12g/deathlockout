@@ -26,6 +26,7 @@ public class LockoutClient implements ClientModInitializer {
     public static String trueMode = "ARMOR";
     public static boolean clientPaused = false;
     public static String clientPausedPlayerName = "";
+    private static LockoutScreen currentScreen = null;
 
     public static final List<PlayerData> clientPlayers = new ArrayList<>();
 
@@ -83,6 +84,13 @@ public class LockoutClient implements ClientModInitializer {
         // ---- System Message Listener ----
         net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents.GAME.register((message, overlay) -> {
             String messageText = message.getString();
+
+            // Pass message to screen if it's open
+            if (currentScreen != null) {
+                currentScreen.addChatMessage(messageText);
+            }
+
+            // Existing witch celebrate sound logic
             if (messageText.startsWith("❌")) {
                 Minecraft client = Minecraft.getInstance();
                 if (client.player != null && client.level != null) {
@@ -167,7 +175,14 @@ public class LockoutClient implements ClientModInitializer {
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             while (OPEN_UI_KEY.consumeClick()) {
-                client.setScreen(new LockoutScreen(clientPlayers, clientMode, clientGoal));
+                currentScreen = new LockoutScreen(clientPlayers, clientMode, clientGoal);
+                client.setScreen(currentScreen);
+            }
+        });
+
+        net.fabricmc.fabric.api.client.screen.v1.ScreenEvents.AFTER_INIT.register((client, screen, scaledWidth, scaledHeight) -> {
+            if (!(screen instanceof LockoutScreen)) {
+                currentScreen = null;
             }
         });
     }
